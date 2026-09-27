@@ -98,7 +98,7 @@ func TestBrowserCommands(t *testing.T) {
 }
 
 func TestWSLDoctorNotes(t *testing.T) {
-	notes := wslDoctorNotes()
+	notes := wslDoctorNotes("/home/me/snowopslabs")
 	if len(notes) == 0 {
 		t.Fatal("expected WSL doctor notes")
 	}
@@ -111,5 +111,22 @@ func TestWSLDoctorNotes(t *testing.T) {
 	}
 	if !found {
 		t.Fatalf("WSL notes should mention the Windows hosts file, got %v", notes)
+	}
+}
+
+func TestWSLDoctorNotesWarnOnWindowsDrive(t *testing.T) {
+	has := func(notes []string) bool {
+		for _, n := range notes {
+			if strings.Contains(n, "Windows drive") {
+				return true
+			}
+		}
+		return false
+	}
+	if !has(wslDoctorNotes("/mnt/c/Users/me/snowopslabs")) {
+		t.Error("a lab under /mnt/c should be warned about")
+	}
+	if has(wslDoctorNotes("/home/me/snowopslabs")) {
+		t.Error("a lab on the Linux filesystem should not be warned about")
 	}
 }

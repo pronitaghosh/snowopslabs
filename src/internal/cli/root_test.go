@@ -95,3 +95,17 @@ func TestPersistentPreRunSkipsEnvironmentDependentCommands(t *testing.T) {
 		}
 	}
 }
+
+func TestWithUserBin(t *testing.T) {
+	tests := []struct{ path, want string }{
+		{"/usr/bin:/bin", "/h/.local/bin:/usr/bin:/bin"},
+		{"/h/.local/bin:/usr/bin", "/h/.local/bin:/usr/bin"},
+		{"/usr/bin:/h/.local/bin", "/usr/bin:/h/.local/bin"},
+		{"", "/h/.local/bin"},
+	}
+	for _, tt := range tests {
+		if got := withUserBin(tt.path, "/h/.local/bin"); got != tt.want {
+			t.Errorf("withUserBin(%q) = %q, want %q", tt.path, got, tt.want)
+		}
+	}
+}

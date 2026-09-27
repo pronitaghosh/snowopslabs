@@ -58,6 +58,22 @@ func TestProbe(t *testing.T) {
 			wantErr: ErrDockerMissing,
 		},
 		{
+			name: "user not in the docker group",
+			fake: func() *toolchain.Fake {
+				return toolchain.NewFake().WhenArgsContainStderr("info", "",
+					"permission denied while trying to connect to the Docker daemon socket", 1)
+			},
+			wantErr: ErrNoPermission,
+		},
+		{
+			name: "docker desktop shim without WSL integration",
+			fake: func() *toolchain.Fake {
+				return toolchain.NewFake().WhenArgsContainStderr("info", "",
+					"The command 'docker' could not be found in this WSL 2 distro.", 1)
+			},
+			wantErr: ErrWSLIntegration,
+		},
+		{
 			name: "daemon down",
 			fake: func() *toolchain.Fake {
 				return toolchain.NewFake().WhenArgsContain("info", "", 1)
@@ -189,5 +205,17 @@ func TestParseGiB(t *testing.T) {
 		if _, err := ParseGiB(bad); err == nil {
 			t.Errorf("ParseGiB(%q) should fail", bad)
 		}
+	}
+}
+
+func TestAccessHint(t *testing.T) {
+	if got := (Host{EngineWSL}).AccessHint(ErrWSLIntegration); !strings.Contains(got, "WSL Integration") {
+		t.Errorf("got %q", got)
+	}
+	if got := (Host{EngineWSL}).AccessHint(ErrNoPermission); !strings.Contains(got, "wsl --shutdown") {
+		t.Errorf("got %q", got)
+	}
+	if got := (Host{EngineNative}).AccessHint(ErrNoPermission); !strings.Contains(got, "newgrp docker") {
+		t.Errorf("got %q", got)
 	}
 }

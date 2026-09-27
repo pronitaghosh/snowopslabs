@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"runtime"
 	"text/tabwriter"
 
@@ -103,7 +104,8 @@ func runDoctor(ctx context.Context, out io.Writer, runner toolchain.Runner) erro
 	}
 	if isWSL() {
 		fmt.Fprintln(out, "\nWSL notes:")
-		for _, n := range wslDoctorNotes() {
+		cwd, _ := os.Getwd()
+		for _, n := range wslDoctorNotes(cwd) {
 			fmt.Fprintf(out, "  - %s\n", n)
 		}
 	}
@@ -153,6 +155,8 @@ func dockerCapacity(ctx context.Context, runner toolchain.Runner, goos string, w
 	switch {
 	case errors.Is(err, capacity.ErrDockerMissing):
 		return "", "", ""
+	case errors.Is(err, capacity.ErrNoPermission), errors.Is(err, capacity.ErrWSLIntegration):
+		return "not usable", fmt.Sprintf("%v. Fix:\n    %s", err, host.AccessHint(err)), ""
 	case errors.Is(err, capacity.ErrDaemonDown):
 		if host.Engine == capacity.EngineColima {
 			return "not running", "", fmt.Sprintf(

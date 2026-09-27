@@ -34,6 +34,12 @@ var (
 	ErrDockerMissing = errors.New("docker is not installed")
 	// ErrDaemonDown means the CLI is present but the engine does not answer.
 	ErrDaemonDown = errors.New("the Docker daemon is not running")
+	// ErrNoPermission means the daemon answered but refused this user: they
+	// are not in the docker group yet, or their session predates joining it.
+	ErrNoPermission = errors.New("the Docker daemon refused this user (permission denied on its socket)")
+	// ErrWSLIntegration means Docker Desktop's WSL shim is present but
+	// integration is off for this distro.
+	ErrWSLIntegration = errors.New("this WSL distro has Docker Desktop integration turned off")
 )
 
 // Need is a CPU and memory requirement for the Docker engine.
@@ -75,12 +81,20 @@ func Probe(ctx context.Context, runner toolchain.Runner) (Resources, error) {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
-	var buf bytes.Buffer
+	var buf, errBuf bytes.Buffer
 	if _, err := runner.Run(ctx, toolchain.Command{
 		Path:   path,
 		Args:   []string{"info", "--format", "{{.NCPU}} {{.MemTotal}}"},
 		Stdout: &buf,
+		Stderr: &errBuf,
 	}); err != nil {
+		msg := errBuf.String() + buf.String()
+		switch {
+		case strings.Contains(msg, "could not be found in this WSL 2 distro"):
+			return Resources{}, ErrWSLIntegration
+		case strings.Contains(msg, "permission denied"):
+			return Resources{}, ErrNoPermission
+		}
 		return Resources{}, ErrDaemonDown
 	}
 	fields := strings.Fields(buf.String())
@@ -163,6 +177,19 @@ func (h Host) StartHint(n Need) string {
 	default:
 		return "sudo systemctl start docker"
 	}
+}
+
+// AccessHint is the fix for ErrNoPermission and ErrWSLIntegration.
+func (h Host) AccessHint(err error) string {
+	if errors.Is(err, ErrWSLIntegration) {
+		return "Docker Desktop → Settings → Resources → WSL Integration → enable this distro,\n" +
+			"Apply & Restart, then reopen this terminal"
+	}
+	relogin := "log out and back in (or run `newgrp docker`)"
+	if h.Engine == EngineWSL {
+		relogin = "run `wsl --shutdown` in PowerShell and reopen this terminal"
+	}
+	return "sudo usermod -aG docker \"$USER\", then " + relogin
 }
 
 // ResizeHint explains how to give the engine at least n.

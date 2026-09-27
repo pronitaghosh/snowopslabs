@@ -62,13 +62,21 @@ func browserCommands(goos string, wsl bool, url string) [][]string {
 // wslDoctorNotes returns the WSL guidance `labctl doctor` prints. A Windows
 // browser resolves ingress hostnames with the Windows hosts file, so `labctl
 // hosts add` inside WSL is not enough on its own.
-func wslDoctorNotes() []string {
-	return []string{
+func wslDoctorNotes(cwd string) []string {
+	notes := []string{
 		"WSL detected. The web UI (labctl ui, http://localhost:3939) works as-is via WSL2 localhost forwarding.",
 		"Ingress hostnames (e.g. http://grafana.k3d.local) opened in a Windows browser use the WINDOWS hosts file,",
 		"  not WSL's /etc/hosts. Add the same entries to C:\\Windows\\System32\\drivers\\etc\\hosts (as Administrator),",
 		"  or reach services from inside WSL (curl) where 'labctl hosts add' applies.",
 		"If WSL keeps overwriting /etc/hosts on restart, set 'generateHosts=false' under [network] in /etc/wsl.conf.",
-		"Ensure Docker Desktop's WSL integration is enabled for this distro (or run a native docker daemon in WSL).",
+		"Docker's memory comes from WSL: set memory= and processors= under [wsl2] in %UserProfile%\\.wslconfig.",
 	}
+	// Windows drives are mounted over a slow 9p bridge and may check files out
+	// with CRLF line endings, which breaks every shell script in the lab.
+	if strings.HasPrefix(cwd, "/mnt/") {
+		notes = append(notes,
+			"You are under "+cwd+", a Windows drive. Keep the lab on the Linux filesystem",
+			"  (e.g. ~/snowopslabs): it is much faster there and scripts keep their LF line endings.")
+	}
+	return notes
 }

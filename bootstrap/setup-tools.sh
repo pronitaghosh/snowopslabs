@@ -31,7 +31,17 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
-INSTALL_DIR="/usr/local/bin"
+# Where downloaded tools go on Linux and WSL: user-owned, so no sudo. labctl
+# adds it to its own PATH, so tools work before the user's shell picks it up.
+# macOS installs through Homebrew instead.
+INSTALL_DIR="${SNOWOPS_BIN_DIR:-$HOME/.local/bin}"
+# The user's own PATH, before labctl or this script extended it; used to tell
+# them when INSTALL_DIR is missing from it.
+ORIGINAL_PATH="${SNOWOPS_ORIGINAL_PATH:-$PATH}"
+case ":$PATH:" in
+  *":$INSTALL_DIR:"*) ;;
+  *) PATH="$INSTALL_DIR:$PATH" ;;
+esac
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -70,12 +80,8 @@ maybe_wsl_notice() {
   echo "    the WINDOWS hosts file. Run 'labctl doctor' for the full WSL checklist."
 }
 
-# Create /usr/local/bin if absent (default on Apple Silicon Macs).
 ensure_install_dir() {
-  if [ ! -d "$INSTALL_DIR" ]; then
-    echo "Creating $INSTALL_DIR..."
-    sudo mkdir -p "$INSTALL_DIR"
-  fi
+  mkdir -p "$INSTALL_DIR"
 }
 
 # version_ge <have> <want> — succeeds when <have> >= <want> as a semver.
@@ -108,106 +114,113 @@ version_ge() {
 # Tool installers
 # ---------------------------------------------------------------------------
 
-install_kubectl() {
-  echo -e "${YELLOW}Checking kubectl (minimum v${KUBECTL_VERSION})...${NC}"
-
-  if command -v kubectl &>/dev/null; then
-    current_version=$(kubectl version --client 2>/dev/null |
-      grep "Client Version:" | awk '{print $NF}' | sed 's/v//')
-    if version_ge "$current_version" "${KUBECTL_VERSION}"; then
-      echo -e "${GREEN}kubectl v${current_version} already installed (meets minimum v${KUBECTL_VERSION})${NC}"
-      return 0
-    fi
-    echo -e "${YELLOW}kubectl v${current_version} is below the minimum v${KUBECTL_VERSION} — installing a newer one${NC}"
-  fi
-
-  ensure_install_dir
-  echo "Downloading kubectl v${KUBECTL_VERSION} for ${OS}/${ARCH}..."
-  curl -fsSLo /tmp/kubectl \
-    "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/${OS}/${ARCH}/kubectl"
-  chmod +x /tmp/kubectl
-  sudo mv /tmp/kubectl "${INSTALL_DIR}/kubectl"
-
-  installed=$(kubectl version --client 2>/dev/null |
-    grep "Client Version:" | awk '{print $NF}' | sed 's/v//')
-  if version_ge "$installed" "${KUBECTL_VERSION}"; then
-    echo -e "${GREEN}kubectl v${installed} installed and verified${NC}"
-  else
-    echo -e "${RED}ERROR: kubectl v${installed} still below the minimum v${KUBECTL_VERSION} — is another kubectl earlier on PATH?${NC}" >&2
-    exit 1
-  fi
+# tool_version <name> — the installed version without a leading "v", or "".
+tool_version() {
+  # A missing tool must read as "" rather than fail: under pipefail the failed
+  # pipeline would otherwise abort the whole script.
+  command -v "$1" >/dev/null 2>&1 || return 0
+  case "$1" in
+    kubectl) kubectl version --client 2>/dev/null | sed -n 's/^Client Version: v\{0,1\}//p' ;;
+    helm) helm version --short 2>/dev/null | sed 's/^v\([^+]*\).*/\1/' ;;
+    k3d) k3d version 2>/dev/null | sed -n 's/^k3d version v\([^ -]*\).*/\1/p' ;;
+    kind) kind version 2>/dev/null | sed -n 's/^kind v\([^ ]*\).*/\1/p' ;;
+  esac || true
 }
 
-install_k3d() {
-  echo -e "${YELLOW}Checking k3d (minimum v${K3D_VERSION})...${NC}"
-
-  if command -v k3d &>/dev/null; then
-    current_version=$(k3d version 2>/dev/null |
-      grep 'k3d version' |
-      sed 's/.*k3d version v\([^ -]*\).*/\1/')
-    if version_ge "$current_version" "${K3D_VERSION}"; then
-      echo -e "${GREEN}k3d v${current_version} already installed (meets minimum v${K3D_VERSION})${NC}"
-      return 0
-    fi
-    echo -e "${YELLOW}k3d v${current_version} is below the minimum v${K3D_VERSION} — installing a newer one${NC}"
-  fi
-
-  ensure_install_dir
-  echo "Downloading k3d v${K3D_VERSION} for ${OS}-${ARCH}..."
-  curl -fsSLo /tmp/k3d \
-    "https://github.com/k3d-io/k3d/releases/download/v${K3D_VERSION}/k3d-${OS}-${ARCH}"
-  chmod +x /tmp/k3d
-  sudo mv /tmp/k3d "${INSTALL_DIR}/k3d"
-
-  installed=$(k3d version 2>/dev/null |
-    grep 'k3d version' |
-    sed 's/.*k3d version v\([^ -]*\).*/\1/')
-  if version_ge "$installed" "${K3D_VERSION}"; then
-    echo -e "${GREEN}k3d v${installed} installed and verified${NC}"
-  else
-    echo -e "${RED}ERROR: k3d v${installed} still below the minimum v${K3D_VERSION} — is another k3d earlier on PATH?${NC}" >&2
-    exit 1
-  fi
+# tool_min / tool_pin <name> — the lowest accepted version, and the version
+# downloaded when the installed one is missing or older (config/versions.env).
+tool_min() {
+  case "$1" in
+    kubectl) echo "$KUBECTL_MIN_VERSION" ;;
+    helm) echo "$HELM_MIN_VERSION" ;;
+    k3d) echo "$K3D_MIN_VERSION" ;;
+    kind) echo "$KIND_MIN_VERSION" ;;
+  esac
+}
+tool_pin() {
+  case "$1" in
+    kubectl) echo "$KUBECTL_VERSION" ;;
+    helm) echo "$HELM_VERSION" ;;
+    k3d) echo "$K3D_VERSION" ;;
+    kind) echo "$KIND_VERSION" ;;
+  esac
 }
 
-install_helm() {
-  echo -e "${YELLOW}Checking Helm (minimum v${HELM_VERSION})...${NC}"
-
-  if command -v helm &>/dev/null; then
-    current_version=$(helm version --short 2>/dev/null |
-      sed 's/v\([^+]*\).*/\1/')
-    if version_ge "$current_version" "${HELM_VERSION}"; then
-      echo -e "${GREEN}Helm v${current_version} already installed (meets minimum v${HELM_VERSION})${NC}"
-      return 0
-    fi
-    echo -e "${YELLOW}Helm v${current_version} is below the minimum v${HELM_VERSION} — installing a newer one${NC}"
-  fi
-
+# download_tool <name> <version> — fetch a static binary into INSTALL_DIR.
+download_tool() {
+  local name="$1" v="$2" tmp
+  tmp="$(mktemp -d)"
+  case "$name" in
+    kubectl) curl -fsSLo "$tmp/kubectl" "https://dl.k8s.io/release/v${v}/bin/${OS}/${ARCH}/kubectl" ;;
+    k3d) curl -fsSLo "$tmp/k3d" "https://github.com/k3d-io/k3d/releases/download/v${v}/k3d-${OS}-${ARCH}" ;;
+    kind) curl -fsSLo "$tmp/kind" "https://github.com/kubernetes-sigs/kind/releases/download/v${v}/kind-${OS}-${ARCH}" ;;
+    helm)
+      curl -fsSLo "$tmp/helm.tar.gz" "https://get.helm.sh/helm-v${v}-${OS}-${ARCH}.tar.gz"
+      tar -xzf "$tmp/helm.tar.gz" -C "$tmp"
+      mv "$tmp/${OS}-${ARCH}/helm" "$tmp/helm"
+      ;;
+  esac
+  chmod +x "$tmp/$name"
   ensure_install_dir
-  echo "Downloading Helm v${HELM_VERSION} for ${OS}-${ARCH}..."
-  local helm_tmp
-  helm_tmp="$(mktemp -d)"
-  curl -fsSLo "${helm_tmp}/helm.tar.gz" \
-    "https://get.helm.sh/helm-v${HELM_VERSION}-${OS}-${ARCH}.tar.gz"
-  tar -xzf "${helm_tmp}/helm.tar.gz" -C "${helm_tmp}"
-  sudo mv "${helm_tmp}/${OS}-${ARCH}/helm" "${INSTALL_DIR}/helm"
-  rm -rf "${helm_tmp}"
+  mv "$tmp/$name" "$INSTALL_DIR/$name"
+  rm -rf "$tmp"
+}
 
-  installed=$(helm version --short 2>/dev/null | sed 's/v\([^+]*\).*/\1/')
-  if version_ge "$installed" "${HELM_VERSION}"; then
-    echo -e "${GREEN}Helm v${installed} installed and verified${NC}"
-  else
-    # This is the shadowed-PATH case: brew's /opt/homebrew/bin/helm wins
-    # over the /usr/local/bin/helm we just wrote. Say so, don't just fail.
-    actual_path="$(command -v helm)"
-    echo -e "${RED}ERROR: helm on PATH is v${installed}, below the minimum v${HELM_VERSION}.${NC}" >&2
-    echo -e "${RED}  Found: ${actual_path}${NC}" >&2
-    echo -e "${RED}  Just installed: ${INSTALL_DIR}/helm${NC}" >&2
-    echo -e "${YELLOW}  A newer helm at ${actual_path} is shadowing it. Either:${NC}" >&2
-    echo -e "${YELLOW}    - upgrade the one on PATH: 'brew upgrade helm' (macOS) / your package manager${NC}" >&2
-    echo -e "${YELLOW}    - or reorder PATH so ${INSTALL_DIR} comes first${NC}" >&2
-    exit 1
+# ensure_tool <name> — leave a new-enough tool alone; otherwise install one
+# (Homebrew on macOS, a pinned download into INSTALL_DIR elsewhere) and verify
+# the one now on PATH is new enough.
+ensure_tool() {
+  local name="$1" min pin have
+  min="$(tool_min "$name")"
+  pin="$(tool_pin "$name")"
+  echo -e "${YELLOW}Checking ${name} (minimum v${min})...${NC}"
+  have="$(tool_version "$name")"
+  if version_ge "$have" "$min"; then
+    echo -e "${GREEN}${name} v${have} is installed${NC}"
+    return 0
   fi
+  if [ -n "$have" ]; then
+    echo -e "${YELLOW}${name} v${have} is older than v${min} — installing a newer one${NC}"
+  fi
+
+  if [ "$OS" = "darwin" ]; then
+    local formula="$name"
+    [ "$name" = kubectl ] && formula=kubernetes-cli
+    _install_homebrew
+    if brew list --formula "$formula" >/dev/null 2>&1; then
+      brew upgrade "$formula"
+    else
+      brew install "$formula"
+    fi
+  else
+    echo "Downloading ${name} v${pin} for ${OS}/${ARCH} into ${INSTALL_DIR}..."
+    download_tool "$name" "$pin"
+  fi
+
+  hash -r
+  have="$(tool_version "$name")"
+  if version_ge "$have" "$min"; then
+    echo -e "${GREEN}${name} v${have} installed${NC}"
+    return 0
+  fi
+  # Another, older copy earlier on PATH is shadowing the one just installed.
+  echo -e "${RED}ERROR: the ${name} on PATH ($(command -v "$name")) is v${have:-unknown}, older than v${min}.${NC}" >&2
+  echo -e "${YELLOW}  Remove or upgrade that copy, or put ${INSTALL_DIR} earlier on PATH, then re-run.${NC}" >&2
+  exit 1
+}
+
+# user_bin_notice — tell the user to add INSTALL_DIR to their shell's PATH when
+# a tool landed there, so kubectl works in their own terminal too.
+user_bin_notice() {
+  [ "$OS" = "darwin" ] && return 0
+  ls "$INSTALL_DIR"/kubectl "$INSTALL_DIR"/helm "$INSTALL_DIR"/k3d "$INSTALL_DIR"/kind >/dev/null 2>&1 || return 0
+  case ":${ORIGINAL_PATH:-}:" in
+    *":$INSTALL_DIR:"*) return 0 ;;
+  esac
+  echo
+  echo -e "${YELLOW}Tools were installed into ${INSTALL_DIR}, which is not on your PATH.${NC}"
+  echo "labctl finds them anyway; to use kubectl yourself, add this to your ~/.bashrc or ~/.zshrc:"
+  echo "  export PATH=\"${INSTALL_DIR}:\$PATH\""
 }
 
 # ---------------------------------------------------------------------------
@@ -236,19 +249,32 @@ _install_homebrew() {
 install_colima() {
   echo -e "${YELLOW}Setting up Colima (macOS container runtime)...${NC}"
 
-  if ! command -v colima &>/dev/null; then
-    _install_homebrew
-    echo "Installing colima and docker CLI via Homebrew..."
-    brew install colima docker
-  else
-    echo -e "${GREEN}Colima already installed${NC}"
-  fi
-
   if docker info &>/dev/null; then
     echo -e "${GREEN}Docker is already running${NC}"
     return 0
   fi
+  if ! command -v colima &>/dev/null; then
+    _install_homebrew
+    echo "Installing colima and the docker CLI via Homebrew..."
+    brew install colima docker docker-buildx
+  fi
+  link_buildx
   ensure_docker_running || exit 1
+}
+
+# link_buildx makes Homebrew's buildx visible to the docker CLI. Without it
+# every app build prints the legacy-builder deprecation warning. Docker Desktop
+# ships its own buildx, so an existing plugin is left alone.
+link_buildx() {
+  command -v brew &>/dev/null || return 0
+  local plugin="$HOME/.docker/cli-plugins/docker-buildx" src
+  [ -e "$plugin" ] && return 0
+  src="$(brew --prefix)/opt/docker-buildx/bin/docker-buildx"
+  if [ ! -x "$src" ]; then
+    brew install docker-buildx >/dev/null 2>&1 || return 0
+  fi
+  mkdir -p "$HOME/.docker/cli-plugins"
+  ln -sfn "$src" "$plugin"
 }
 
 # Linux: detect distro ID from /etc/os-release.
@@ -307,6 +333,17 @@ install_docker_linux() {
     echo -e "${GREEN}Docker Engine already installed and running${NC}"
     return 0
   fi
+  # A docker that exists but cannot be used (Docker Desktop's WSL shim with
+  # integration off, or a stale docker-group session) must not trigger a
+  # second, conflicting install.
+  local problem
+  if ! problem="$(docker_access_problem)"; then
+    echo -e "${RED}ERROR: ${problem}${NC}" >&2
+    exit 1
+  fi
+  if command -v docker &>/dev/null && is_wsl; then
+    echo -e "${YELLOW}A docker CLI is installed but no daemon answers.${NC}"
+  fi
 
   local distro
   distro="$(_linux_distro)"
@@ -344,14 +381,27 @@ install_docker_linux() {
     sudo systemctl start docker
   elif command -v service &>/dev/null; then
     sudo service docker start
+    if is_wsl; then
+      echo -e "${YELLOW}WSL is running without systemd, so Docker will not start by itself after 'wsl --shutdown'.${NC}"
+      echo "  Either run 'sudo service docker start' in each new session, or enable systemd:"
+      echo "  add '[boot]' and 'systemd=true' to /etc/wsl.conf, then 'wsl --shutdown' in PowerShell."
+    fi
   fi
 
-  # Add current user to the docker group for non-root access.
+  # Add current user to the docker group for non-root access. The group only
+  # applies to new login sessions, so this run cannot use Docker yet: stop with
+  # the next step instead of timing out on a daemon we are not allowed to use.
   local current_user="${USER:-$(id -un)}"
   if ! id -nG "$current_user" 2>/dev/null | grep -qw docker; then
     sudo usermod -aG docker "$current_user"
-    echo -e "${YELLOW}Added '$current_user' to the docker group.${NC}"
-    echo -e "${YELLOW}NOTE: Run 'newgrp docker' or re-login for the change to take effect.${NC}"
+    echo
+    echo -e "${GREEN}Docker is installed and '$current_user' was added to the docker group.${NC}"
+    if is_wsl; then
+      echo -e "${YELLOW}Next: run 'wsl --shutdown' in PowerShell, reopen this terminal, then re-run 'labctl init'.${NC}"
+    else
+      echo -e "${YELLOW}Next: log out and back in (or run 'newgrp docker'), then re-run 'labctl init'.${NC}"
+    fi
+    exit 1
   fi
 
   wait_for_docker 60 || exit 1
@@ -368,45 +418,12 @@ install_docker() {
 }
 
 # ---------------------------------------------------------------------------
-# kind (headless local cluster — powers CI and the nightly e2e job)
-# ---------------------------------------------------------------------------
-
-install_kind() {
-  echo -e "${YELLOW}Checking kind (minimum v${KIND_VERSION})...${NC}"
-
-  if command -v kind &>/dev/null; then
-    current_version=$(kind version 2>/dev/null |
-      sed 's/.*kind v\([^ ]*\).*/\1/')
-    if version_ge "$current_version" "${KIND_VERSION}"; then
-      echo -e "${GREEN}kind v${current_version} already installed (meets minimum v${KIND_VERSION})${NC}"
-      return 0
-    fi
-    echo -e "${YELLOW}kind v${current_version} is below the minimum v${KIND_VERSION} — installing a newer one${NC}"
-  fi
-
-  ensure_install_dir
-  echo "Downloading kind v${KIND_VERSION} for ${OS}-${ARCH}..."
-  curl -fsSLo /tmp/kind \
-    "https://github.com/kubernetes-sigs/kind/releases/download/v${KIND_VERSION}/kind-${OS}-${ARCH}"
-  chmod +x /tmp/kind
-  sudo mv /tmp/kind "${INSTALL_DIR}/kind"
-
-  installed=$(kind version 2>/dev/null | sed 's/.*kind v\([^ ]*\).*/\1/')
-  if version_ge "$installed" "${KIND_VERSION}"; then
-    echo -e "${GREEN}kind v${installed} installed and verified${NC}"
-  else
-    echo -e "${RED}ERROR: kind v${installed} still below the minimum v${KIND_VERSION} — is another kind earlier on PATH?${NC}" >&2
-    exit 1
-  fi
-}
-
-# ---------------------------------------------------------------------------
 # Profile groups
 # ---------------------------------------------------------------------------
 
 install_common() {
   echo -e "${GREEN}========== Installing Common Tools ==========${NC}"
-  install_kubectl
+  ensure_tool kubectl
   echo -e "${GREEN}========== Common Tools Complete ==========${NC}\n"
 }
 
@@ -414,8 +431,8 @@ install_k3d_profile() {
   echo -e "${GREEN}========== Installing K3D Profile ==========${NC}"
   install_common
   install_docker # Colima on macOS; Docker Engine on Linux
-  install_k3d
-  install_helm
+  ensure_tool k3d
+  ensure_tool helm
   echo -e "${GREEN}========== K3D Profile Complete ==========${NC}\n"
 }
 
@@ -423,8 +440,8 @@ install_kind_profile() {
   echo -e "${GREEN}========== Installing kind Profile ==========${NC}"
   install_common
   install_docker # Colima on macOS; Docker Engine on Linux
-  install_kind
-  install_helm
+  ensure_tool kind
+  ensure_tool helm
   echo -e "${GREEN}========== kind Profile Complete ==========${NC}\n"
 }
 
@@ -481,6 +498,7 @@ main() {
       ;;
   esac
 
+  user_bin_notice
   echo -e "${GREEN}Setup complete!${NC}"
   maybe_wsl_notice
 }

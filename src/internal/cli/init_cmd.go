@@ -64,6 +64,8 @@ func preflightDocker(ctx context.Context, runner toolchain.Runner, profile, goos
 	host := capacity.DetectHost(ctx, runner, goos, wsl)
 	res, err := capacity.Probe(ctx, runner)
 	switch {
+	case errors.Is(err, capacity.ErrNoPermission), errors.Is(err, capacity.ErrWSLIntegration):
+		return fmt.Errorf("%w.\nFix it, then re-run 'labctl init':\n  %s", err, host.AccessHint(err))
 	case errors.Is(err, capacity.ErrDockerMissing), errors.Is(err, capacity.ErrDaemonDown):
 		return fmt.Errorf("%w.\nStart it, then re-run 'labctl init':\n  %s", err, host.StartHint(capacity.Floor))
 	case err != nil:

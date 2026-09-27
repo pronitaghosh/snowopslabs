@@ -88,6 +88,11 @@ pick_port() {
 # whole cluster. Best-effort: never fail cluster bringup over this.
 raise_inotify_limits() {
   local node
+  # k3d nodes share the kernel of whatever runs Docker. Under colima, Docker
+  # Desktop or WSL that is a VM; on native Linux it is this machine.
+  if [ "$(uname -s)" = "Linux" ] && [ -z "${WSL_DISTRO_NAME:-}" ]; then
+    echo "Raising fs.inotify.max_user_instances to 512 (on native Linux this is your host's kernel setting)."
+  fi
   for node in $(docker ps --filter "label=k3d.cluster=${CLUSTER_NAME}" --format '{{.Names}}' 2>/dev/null); do
     docker exec "$node" sysctl -w fs.inotify.max_user_instances=512 >/dev/null 2>&1 || true
   done

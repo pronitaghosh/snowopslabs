@@ -45,9 +45,32 @@ labctl doctor
 
 ### `labctl setup-tools`
 
-Installs those tools, version-pinned from `config/versions.env`, for the active
-`PROFILE`. This is the first step of `init`; run it alone to prepare a machine
-without creating a cluster. Equivalent to `make setup-tools`.
+Installs the tools the active `PROFILE` needs: kubectl, helm, and k3d or kind,
+plus a Docker engine. This is the first step of `init`; run it alone to prepare
+a machine without creating a cluster. Equivalent to `make setup-tools`.
+
+A tool at or above its minimum in `config/versions.env` is left alone, so your
+own newer copy is never replaced. Otherwise:
+
+| OS | How tools are installed | Needs sudo? |
+|---|---|---|
+| macOS | Homebrew (`kubernetes-cli`, `helm`, `k3d`, `kind`, `colima`, `docker`, `docker-buildx`); an older brew install is upgraded | no (installing Homebrew itself asks once) |
+| Linux, WSL2 | the pinned version from `versions.env`, downloaded into `~/.local/bin` (`SNOWOPS_BIN_DIR` overrides) | only for Docker Engine |
+
+labctl puts `~/.local/bin` on its own PATH, so freshly installed tools work
+straight away; setup-tools prints the line to add to your shell profile so
+`kubectl` works in your own terminal too.
+
+Docker on Linux and WSL:
+
+- **Just added to the `docker` group:** the group only applies to new login
+  sessions, so setup-tools stops and says so. Log out and back in (WSL:
+  `wsl --shutdown` in PowerShell, then reopen), then re-run `labctl init`.
+- **Docker Desktop installed on Windows but not enabled for this distro:**
+  setup-tools does not install a second Docker; it tells you to turn on
+  Settings → Resources → WSL Integration for the distro.
+- **WSL without systemd:** Docker is started with `service`, and setup-tools
+  explains how to enable systemd so it starts on its own.
 
 ### `labctl check`
 

@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
+	"slices"
 
 	"github.com/spf13/cobra"
 
@@ -222,9 +224,35 @@ func SetVersion(v string) {
 // build-time -X main.version ldflag (see cmd/labctl/main.go).
 func Execute(version string) {
 	SetVersion(version)
+	addUserBinToPath()
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
 	}
+}
+
+// addUserBinToPath puts ~/.local/bin, where setup-tools installs kubectl, helm
+// and k3d on Linux and WSL, at the front of labctl's own PATH, so a tool it has
+// just installed works before the user's shell has that directory. The user's
+// PATH is kept in SNOWOPS_ORIGINAL_PATH so setup-tools can tell them to add it.
+func addUserBinToPath() {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return
+	}
+	path := os.Getenv("PATH")
+	_ = os.Setenv("SNOWOPS_ORIGINAL_PATH", path)
+	_ = os.Setenv("PATH", withUserBin(path, filepath.Join(home, ".local", "bin")))
+}
+
+// withUserBin prepends dir to path unless it is already there.
+func withUserBin(path, dir string) string {
+	if slices.Contains(filepath.SplitList(path), dir) {
+		return path
+	}
+	if path == "" {
+		return dir
+	}
+	return dir + string(os.PathListSeparator) + path
 }
 
 func init() {

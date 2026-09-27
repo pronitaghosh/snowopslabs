@@ -43,10 +43,49 @@ colima_size_arg() {
   esac
 }
 
+# docker_access_problem prints why a present docker CLI cannot use the daemon
+# when the cause is not "it is stopped", and fails; it succeeds (prints
+# nothing) otherwise. Two cases make every later step fail confusingly:
+#   - Docker Desktop's WSL shim, when WSL Integration is off for this distro
+#   - a user just added to the docker group whose session predates it
+docker_access_problem() {
+  local out
+  command -v docker >/dev/null 2>&1 || return 0
+  out="$(docker info 2>&1 >/dev/null || true)"
+  case "$out" in
+    *"could not be found in this WSL 2 distro"*)
+      echo "Docker Desktop is installed on Windows but not enabled for this WSL distro."
+      echo "  Docker Desktop → Settings → Resources → WSL Integration → enable '${WSL_DISTRO_NAME:-this distro}',"
+      echo "  Apply & Restart, then reopen this terminal and re-run 'labctl init'."
+      return 1
+      ;;
+    *"permission denied"*)
+      echo "Docker is running, but your user may not use it yet."
+      if id -nG 2>/dev/null | grep -qw docker; then
+        echo "  You are in the docker group, but this terminal started before you were added."
+      else
+        echo "  Add yourself to the docker group: sudo usermod -aG docker \"\$USER\""
+      fi
+      if [ -n "${WSL_DISTRO_NAME:-}" ]; then
+        echo "  Then run 'wsl --shutdown' in PowerShell, reopen this terminal and re-run 'labctl init'."
+      else
+        echo "  Then log out and back in (or run 'newgrp docker') and re-run 'labctl init'."
+      fi
+      return 1
+      ;;
+  esac
+  return 0
+}
+
 # ensure_docker_running — make the daemon answer, starting colima on macOS.
 ensure_docker_running() {
   if docker info >/dev/null 2>&1; then
     return 0
+  fi
+  local problem
+  if ! problem="$(docker_access_problem)"; then
+    echo "ERROR: ${problem}" >&2
+    return 1
   fi
   if [ "$(uname -s)" = "Darwin" ] && command -v colima >/dev/null 2>&1; then
     local cpus mem

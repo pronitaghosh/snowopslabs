@@ -1,0 +1,18 @@
+# Scripts must keep LF line endings. A Windows clone with core.autocrlf=true
+# would otherwise check them out with CRLF, and bash then fails on every line
+# with "$'\r': command not found" — including inside WSL.
+* text=auto
+*.sh text eol=lf
+*.bash text eol=lf
+*.bats text eol=lf
+*.env text eol=lf
+*.env.example text eol=lf
+*.mk text eol=lf
+Makefile text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+
+*.png binary
+*.gif binary
+*.jpg binary
+*.ico binary
