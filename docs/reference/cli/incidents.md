@@ -17,6 +17,13 @@ labctl incident resolve                       # escape hatch: undo the active fa
 labctl incident resolve oom-kill              # works even if active state was lost
 ```
 
+## Room to inject
+
+`labctl incident inject` runs the same capacity check as `scenario up`: a fault
+whose `fault.yaml` declares `requirements.memory` (a noisy neighbour, say) is
+blocked when Docker lacks room for it, with the same advice. Injecting into an
+app an active scenario is graded against prints a warning.
+
 ## Which application gets broken
 
 A fault names its workload through `{{.WorkloadName}}` rather than an app

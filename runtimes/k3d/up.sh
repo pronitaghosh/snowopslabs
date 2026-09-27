@@ -9,9 +9,10 @@ set -euo pipefail
 CLUSTER_NAME="${1:-${CLUSTER_NAME:-snowops}}"
 HTTP_PORT="${HTTP_PORT:-80}"
 HTTPS_PORT="${HTTPS_PORT:-443}"
-# Number of agent (worker) nodes. Multi-node by default so day-2 drills
-# (node drain, rolling upgrade) have somewhere to reschedule pods.
-AGENTS="${AGENTS:-2}"
+# Number of agent (worker) nodes. One agent plus the server gives two
+# schedulable nodes; drills that need more add them when they start
+# (add-agents.sh).
+AGENTS="${AGENTS:-1}"
 # Optional k3s version pin (e.g. K3S_VERSION=v1.28.8-k3s1). Empty = k3d default.
 # The cluster-upgrade-drill creates a cluster pinned to an older version, then
 # rolls the agents to a newer one.

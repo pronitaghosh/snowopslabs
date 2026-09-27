@@ -164,6 +164,7 @@ func bindWorkload(appName string, explicit bool) error {
 	incEng.MonitoringNamespace = cfg.MonitoringNamespace
 	incEng.Workload = bound
 	incEng.AlertmanagerURL = labcheck.AlertmanagerURL(cfg)
+	attachAdmissionGate()
 	return nil
 }
 

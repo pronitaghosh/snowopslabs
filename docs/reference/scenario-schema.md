@@ -307,6 +307,40 @@ Prerequisites (workload capabilities), bound to "echo-server":
   - readiness-toggle       missing
 ```
 
+## Requirements
+
+`requirements` tells labctl what activating the scenario needs from the lab
+beyond what it already declares. Everything is optional.
+
+```yaml
+requirements:
+  memory: 300Mi     # memory for this scenario's own workloads
+  cpus: 4           # fewest Docker CPUs it runs well on
+  agents: 2         # agent nodes it needs
+  exclusive: true   # nothing else may be active alongside it
+```
+
+| Field | Meaning |
+|---|---|
+| `memory` | A Kubernetes quantity (`300Mi`, `1.5Gi`) for the workloads that belong to this scenario alone. Leave out the Helm releases it installs, the platform components it lists and its apps: those have measured footprints in `config/footprints.yaml` and are counted once however many active scenarios share them. |
+| `cpus` | Fewer Docker CPUs only warns; the scenario runs slowly. |
+| `agents` | k3d adds the missing agent nodes when the scenario starts, if memory allows. kind cannot add nodes to a running cluster, so the activation stops and asks for `AGENTS=<n>` and `labctl reset`. |
+| `exclusive` | For a drill that changes the cluster itself, such as replacing its nodes. Nothing else may be active while it is, and it cannot start while anything else is. |
+
+Before a scenario (or a fault, which takes the same `requirements` in
+`fault.yaml`) starts, labctl estimates the lab's memory two ways and uses the
+larger: the baseline plus the footprints of everything active and the new
+scenario, and the lab's current usage plus whatever the new scenario would
+start that is not already running. If that exceeds 85% of Docker's memory the
+activation is blocked. The message lists which active scenarios to bring down
+to make room and how large to make Docker instead, with the resize command for
+colima, Docker Desktop, WSL or native Linux. Too few CPUs, and two active
+scenarios bound to the same app, only warn.
+
+`scripts/measure-footprints.sh` measures what each scenario adds on a real lab;
+use it to set `memory` for a new scenario and to update
+`config/footprints.yaml`.
+
 ## Template variables
 
 URLs, commands, namespaces, snippets and manifests are Go templates.
@@ -574,6 +608,9 @@ Enforced at load time — an invalid scenario refuses to load, and CI fails on i
 - Asset paths stay inside the scenario directory; absolute paths and `..`
   traversal are rejected.
 - Template variables must be known.
+- A URL is built from `{{.IngressURLSuffix}}`, never `{{.DomainSuffix}}`.
+- `requirements.memory` is a quantity such as `300Mi`; `cpus` and `agents`
+  are not negative.
 - A `path` on a snippet or component must resolve.
 - A command that calls a workload-bound script passes `--app`.
 - A command never runs `kubectl apply|create|replace|delete -f` on a templated

@@ -221,6 +221,14 @@ export interface ScenarioStage {
   components?: ScenarioComponent[]
 }
 
+/** What activating a scenario needs from the lab (pkg/scenario.Requirements). */
+export interface ScenarioRequirements {
+  memory?: string
+  cpus?: number
+  agents?: number
+  exclusive?: boolean
+}
+
 export interface Scenario {
   name: string
   displayName: string
@@ -229,6 +237,7 @@ export interface Scenario {
   active: boolean
   runtimes?: string[]
   prerequisites?: ScenarioPrerequisites
+  requirements?: ScenarioRequirements
   components?: ScenarioComponent[]
   stages?: ScenarioStage[]
   explore?: Explore

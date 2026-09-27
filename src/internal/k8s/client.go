@@ -416,6 +416,15 @@ func HelmReleaseDeployed(ctx context.Context, namespace, release string) bool {
 	return err == nil && strings.TrimSpace(out) != ""
 }
 
+// AgentCount is the number of nodes without the control-plane role.
+func AgentCount(ctx context.Context) (int, error) {
+	out, err := kubectl(ctx, "get", "nodes", "-l", "!node-role.kubernetes.io/control-plane", "-o", "name")
+	if err != nil {
+		return 0, fmt.Errorf("listing agent nodes: %w", err)
+	}
+	return len(strings.Fields(out)), nil
+}
+
 // GetCurrentContext returns the current kubectl context name.
 func GetCurrentContext(ctx context.Context) (string, error) {
 	return kubectl(ctx, "config", "current-context")

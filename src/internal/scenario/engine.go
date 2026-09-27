@@ -59,6 +59,7 @@ type (
 	ExploreCommand = schema.ExploreCommand
 	Parameter      = schema.Parameter
 	Snippet        = schema.Snippet
+	Requirements   = schema.Requirements
 	Reference      = schema.Reference
 )
 
@@ -84,6 +85,10 @@ type Engine struct {
 	// Hooks let a build add behaviour around activation and checks (ADR-0008).
 	// The default hooks do nothing.
 	Hooks extension.Hooks
+
+	// Admit, when set, is asked before a scenario is activated whether the lab
+	// has room for it; an error blocks the activation.
+	Admit AdmitFunc
 
 	scenarios  map[string]*Scenario
 	loadErrors map[string]error // scenario dir name → why it failed to load
@@ -383,6 +388,17 @@ func (e *Engine) Up(name string, exec CommandExecutor, force bool) error {
 	e.resolvedParams = params
 	defer func() { e.resolvedParams = nil }()
 
+	ctx := context.Background()
+	if e.Admit != nil {
+		d, err := e.Demand(s)
+		if err != nil {
+			return err
+		}
+		if err := e.Admit(ctx, e.output(), d); err != nil {
+			return fmt.Errorf("scenario %s cannot start: %w", name, err)
+		}
+	}
+
 	// Expand labels as well as commands; both are printed.
 	fmt.Fprintf(e.output(), "Activating scenario: %s\n", e.resolveTemplate(s.DisplayName))
 	fmt.Fprintf(e.output(), "  %s\n\n", e.resolveTemplate(s.Description))
@@ -408,7 +424,6 @@ func (e *Engine) Up(name string, exec CommandExecutor, force bool) error {
 		fmt.Fprintln(e.output())
 	}
 
-	ctx := context.Background()
 	total := len(s.AllComponents())
 	i := 0
 	for _, st := range s.StagesOrDefault() {

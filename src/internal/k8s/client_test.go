@@ -449,3 +449,28 @@ func TestUnreachableReason(t *testing.T) {
 		})
 	}
 }
+
+func TestAgentCount(t *testing.T) {
+	tests := []struct {
+		name     string
+		script   string
+		expected int
+		wantErr  bool
+	}{
+		{name: "two agents", script: `printf 'node/k3d-lab-agent-0\nnode/k3d-lab-agent-1\n'`, expected: 2},
+		{name: "server only", script: `exit 0`, expected: 0},
+		{name: "unreachable", script: `echo "connection refused" >&2; exit 1`, wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			stubKubectl(t, tt.script)
+			got, err := AgentCount(t.Context())
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if got != tt.expected {
+				t.Errorf("AgentCount = %d, want %d", got, tt.expected)
+			}
+		})
+	}
+}

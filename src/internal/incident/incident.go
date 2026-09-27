@@ -155,6 +155,10 @@ type Engine struct {
 	// IngressURLSuffix is DomainSuffix plus a non-default ingress port; see
 	// config.IngressURLSuffix. The constructor sets it to DomainSuffix.
 	IngressURLSuffix string
+	// Admit, when set, is asked before a fault is injected whether the lab
+	// has room for it; an error blocks the injection.
+	Admit AdmitFunc
+
 	// AlertmanagerURL is where Status queries fired alerts.
 	// Callers set it from ALERTMANAGER_URL or the ingress default.
 	AlertmanagerURL string
@@ -522,6 +526,15 @@ func (e *Engine) Inject(name string, exec *executor.Executor, force, silent bool
 	}
 	if err := e.preflight(f); err != nil {
 		return nil, err
+	}
+	if e.Admit != nil {
+		d, err := e.Demand(f)
+		if err != nil {
+			return nil, err
+		}
+		if err := e.Admit(context.Background(), os.Stdout, d); err != nil {
+			return nil, fmt.Errorf("incident %s cannot start: %w", f.Name, err)
+		}
 	}
 	if err := e.runFaultScript(f, "inject.sh", "Inject incident: "+f.Name, exec); err != nil {
 		return f, fmt.Errorf("injecting %s: %w", f.Name, err)

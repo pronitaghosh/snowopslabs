@@ -1,0 +1,50 @@
+#!/usr/bin/env bats
+# SPDX-License-Identifier: Apache-2.0
+#
+# runtimes/k3d/add-agents.sh grows a running k3d cluster to a total number of
+# agent nodes and makes the new nodes able to run the lab's app images.
+
+load 'helpers/stub'
+
+setup() {
+  stub_setup
+  stub_command k3d kubectl docker
+  ROOT="$(project_root)"
+  WORK="$STUB_DIR/work"
+  mkdir -p "$WORK/apps/go-api" "$WORK/runtimes"
+  touch "$WORK/apps/go-api/app.env"
+  cp -R "$ROOT/runtimes/k3d" "$WORK/runtimes/"
+  export CLUSTER_NAME=lab
+}
+
+teardown() {
+  stub_teardown
+}
+
+@test "adds the missing agents and imports the app images into them" {
+  stub_when kubectl "get nodes" 0 "node/k3d-lab-agent-0"
+  stub_when docker "images" 0 "go-api:v1.2.0"
+  cd "$WORK"
+  run bash runtimes/k3d/add-agents.sh 2
+  [ "$status" -eq 0 ]
+  assert_call_count k3d 1 "node create"
+  assert_called k3d "node create lab-agent-1 --cluster lab --role agent"
+  assert_called k3d "image import go-api:v1.2.0 --cluster lab"
+  assert_called kubectl "wait --for=condition=Ready node k3d-lab-agent-1"
+}
+
+@test "does nothing when the cluster already has enough agents" {
+  stub_when kubectl "get nodes" 0 "node/k3d-lab-agent-0"
+  cd "$WORK"
+  run bash runtimes/k3d/add-agents.sh 1
+  [ "$status" -eq 0 ]
+  refute_called k3d "node create"
+}
+
+@test "fails when k3d cannot create the node" {
+  stub_when kubectl "get nodes" 0 "node/k3d-lab-agent-0"
+  stub_when k3d "node create" 1
+  cd "$WORK"
+  run bash runtimes/k3d/add-agents.sh 2
+  [ "$status" -ne 0 ]
+}
