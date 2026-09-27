@@ -58,7 +58,7 @@ labctl incident inject --random --category network
 | `--category` | — | restrict `--random` to `workload`, `network`, `resources`, `storage` or `config` |
 | `--silent` | off | do not reveal which fault was injected |
 | `--force` | off | inject even when another incident is active |
-| `--deploy-prereqs` | off | build and deploy the target app if it is not running |
+| `--deploy-prereqs` | off | install the platform components the fault needs, and build and deploy the target app, if they are not running |
 
 ## Rules and timing
 

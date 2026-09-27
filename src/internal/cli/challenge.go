@@ -115,8 +115,11 @@ func challengeStartCmd() *cobra.Command {
 				return err
 			}
 
-			// The setup breaks a running app, so check it is deployed first (or
-			// deploy it with --deploy-prereqs).
+			// The setup breaks a running app, so check it and the platform it
+			// needs are there first (or install them with --deploy-prereqs).
+			if err := ensurePlatformPrereqs(cmd.Context(), cmd.OutOrStdout(), challengePlatformPrereqs(c), deployPrereqs); err != nil {
+				return err
+			}
 			if err := ensureAppsDeployed(cmd.Context(), challengeRequiredApps(c), deployPrereqs); err != nil {
 				return err
 			}
@@ -145,13 +148,29 @@ func challengeStartCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().BoolVar(&force, "force", false, "Override an already-active challenge")
-	cmd.Flags().BoolVar(&deployPrereqs, "deploy-prereqs", false, "build and deploy the app this challenge needs if it is not already running")
+	cmd.Flags().BoolVar(&deployPrereqs, "deploy-prereqs", false, "install the platform components and app this challenge needs, if they are not already running")
 	return cmd
 }
 
 // challengeRequiredApps returns the repo apps a challenge's setup depends on,
 // so `start` can check they are deployed. Incident targets that are not repo
 // apps, such as namespaces the fault script creates, are left out.
+// challengePlatformPrereqs is the platform the challenge's setup scenario or
+// fault needs.
+func challengePlatformPrereqs(c *challenge.Challenge) []string {
+	switch c.Setup.Type {
+	case "scenario":
+		if s, err := scenes.Get(c.Setup.Ref); err == nil {
+			return s.Prerequisites.Platform
+		}
+	case "incident":
+		if f, err := incEng.Get(c.Setup.Ref); err == nil {
+			return f.Prerequisites.Platform
+		}
+	}
+	return nil
+}
+
 func challengeRequiredApps(c *challenge.Challenge) []string {
 	switch c.Setup.Type {
 	case "scenario":

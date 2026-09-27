@@ -39,7 +39,7 @@ labctl challenge history                        # past runs with MTTR, score, hi
 
 | Flag | Default | Meaning |
 |---|---|---|
-| `--deploy-prereqs` | off | build and deploy the app the challenge needs |
+| `--deploy-prereqs` | off | install the platform components and build and deploy the app the challenge needs |
 | `--force` | off | override an already-active challenge |
 
 **Score formula:** `100 − (hints × penalty) − time_over_par_penalty`, scaled by

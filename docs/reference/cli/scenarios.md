@@ -37,7 +37,7 @@ scenario is not active). A path outside the scenario's directory is refused.
 
 | Flag | Default | Meaning |
 |---|---|---|
-| `--deploy-prereqs` | off | build and deploy prerequisite apps that are not running yet |
+| `--deploy-prereqs` | off | install prerequisite platform components and build and deploy prerequisite apps that are not running yet. Without it, a missing prerequisite stops `scenario up` with the command that installs it. |
 | `--force` | off | reinstall even when the scenario is already active |
 | `--set key=value` | — | override a scenario parameter; repeatable |
 

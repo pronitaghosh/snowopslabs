@@ -64,18 +64,8 @@ func itemRunning(ctx context.Context, item capacity.Item) bool {
 		ns, name, ok := strings.Cut(item.Name, "/")
 		return ok && k8s.HelmReleaseDeployed(ctx, ns, name)
 	case capacity.ItemPlatform:
-		category, provider, err := resolveTarget(item.Name)
-		if err != nil {
-			return false
-		}
-		p, err := reg.GetProvider(category, provider)
-		if err != nil {
-			return false
-		}
-		if p.SharesNamespace() {
-			return k8s.HelmReleaseExists(ctx, p.Namespace(), p.Name)
-		}
-		return k8s.NamespaceExists(ctx, p.Namespace())
+		installed, _ := platformPrereqInstalled(ctx, item.Name)
+		return installed
 	case capacity.ItemApp:
 		ns := item.Name
 		if appCfg, err := config.LoadAppConfig(cfg.ProjectRoot, item.Name); err == nil && appCfg.Namespace != "" {

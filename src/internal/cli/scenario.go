@@ -5,6 +5,7 @@ package cli
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"text/tabwriter"
@@ -98,12 +99,21 @@ var scenarioUpCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+		// Check the lab has room before installing any prerequisite for it.
+		// Warnings are left to the activation itself, which checks again.
+		if scenes.Admit != nil && !s.Active {
+			if d, err := scenes.Demand(s); err == nil {
+				if err := scenes.Admit(cmd.Context(), io.Discard, d); err != nil {
+					return fmt.Errorf("scenario %s cannot start: %w", name, err)
+				}
+			}
+		}
+		if err := ensurePlatformPrereqs(cmd.Context(), os.Stdout, s.Prerequisites.Platform, scenarioDeployPrereqs); err != nil {
+			return err
+		}
 		if err := ensureAppsDeployed(cmd.Context(), scenes.ResolvedPrereqApps(s), scenarioDeployPrereqs); err != nil {
 			return err
 		}
-		// Platform prerequisites are not installed automatically; warn about
-		// any that look missing.
-		warnMissingPlatformPrereqs(cmd.Context(), os.Stderr, s.Prerequisites.Platform)
 		// An already-active scenario is left alone unless --force is given.
 		if s.Active && !scenarioUpForce {
 			fmt.Fprintf(os.Stderr, "Scenario %s is already active. Re-run with --force to reinstall.\n", name)
@@ -532,7 +542,7 @@ func init() {
 
 	scenarioNewCmd.Flags().BoolVar(&scenarioNewForce, "force", false, "overwrite the scenario if it already exists")
 	scenarioUpCmd.Flags().BoolVar(&scenarioUpForce, "force", false, "reinstall even if the scenario is already active")
-	scenarioUpCmd.Flags().BoolVar(&scenarioDeployPrereqs, "deploy-prereqs", false, "build and deploy any prerequisite apps that are not yet running")
+	scenarioUpCmd.Flags().BoolVar(&scenarioDeployPrereqs, "deploy-prereqs", false, "install any prerequisite platform components and apps that are not yet running")
 	scenarioUpCmd.Flags().StringToStringVar(&scenarioUpParams, "set", nil, "override a scenario parameter (repeatable): --set Name=value, matching the parameter name exactly (e.g. --set Threshold=15 --set MaxReplicas=4)")
 
 	scenarioCmd.AddCommand(scenarioNewCmd)
