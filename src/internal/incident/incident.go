@@ -46,7 +46,10 @@ type Fault struct {
 	Severity      string        `yaml:"severity" json:"severity"` // low | medium | high
 	Target        Target        `yaml:"target" json:"target"`
 	Prerequisites Prerequisites `yaml:"prerequisites" json:"prerequisites"`
-	Detection     checks.Check  `yaml:"detection" json:"detection"` // passes ⇔ the fault is RESOLVED
+	// Requirements is what injecting it needs from the lab, such as the
+	// memory a noisy-neighbour workload takes.
+	Requirements scenario.Requirements `yaml:"requirements,omitempty" json:"requirements"`
+	Detection    checks.Check          `yaml:"detection" json:"detection"` // passes ⇔ the fault is RESOLVED
 	// ExpectAlert names the Alertmanager alert this fault should fire.
 	// inject.sh applies the matching PrometheusRule from alerts/rule.yaml,
 	// and `incident status` reports whether the alert is firing.
@@ -92,6 +95,9 @@ func (f *Fault) Validate() error {
 
 	if strings.TrimSpace(f.Name) == "" {
 		add("name is required")
+	}
+	if err := f.Requirements.Validate(); err != nil {
+		add("%v", err)
 	}
 	if !validCategories[f.Category] {
 		add("unknown category %q (expected workload | network | resources | storage | config)", f.Category)
@@ -147,7 +153,7 @@ type Engine struct {
 	ProjectRoot  string
 	DomainSuffix string
 	// IngressURLSuffix is DomainSuffix plus a non-default ingress port; see
-	// config.IngressURLSuffix. Empty means DomainSuffix.
+	// config.IngressURLSuffix. The constructor sets it to DomainSuffix.
 	IngressURLSuffix string
 	// AlertmanagerURL is where Status queries fired alerts.
 	// Callers set it from ALERTMANAGER_URL or the ingress default.
@@ -171,6 +177,7 @@ func NewEngine(projectRoot, domainSuffix string) *Engine {
 	e := &Engine{
 		ProjectRoot:         projectRoot,
 		DomainSuffix:        domainSuffix,
+		IngressURLSuffix:    domainSuffix,
 		MonitoringNamespace: "monitoring",
 		Workload:            workload.Default(workload.DefaultApp),
 		faults:              make(map[string]*Fault),
@@ -685,15 +692,6 @@ func (e *Engine) resolveTemplate(input string) string {
 
 // templateContext returns the template variables for the engine's current
 // binding. Faults can use the same variables as scenarios.
-// ingressURLSuffix is IngressURLSuffix, or the domain suffix when the caller
-// left it unset (port 80).
-func (e *Engine) ingressURLSuffix() string {
-	if e.IngressURLSuffix != "" {
-		return e.IngressURLSuffix
-	}
-	return e.DomainSuffix
-}
-
 func (e *Engine) templateContext() tmpl.Context {
 	return e.templateContextFor(e.Workload)
 }
@@ -703,7 +701,7 @@ func (e *Engine) templateContextFor(bound workload.Workload) tmpl.Context {
 	w := bound.WithDefaults()
 	return tmpl.Context{
 		DomainSuffix:        e.DomainSuffix,
-		IngressURLSuffix:    e.ingressURLSuffix(),
+		IngressURLSuffix:    e.IngressURLSuffix,
 		MonitoringNamespace: e.MonitoringNamespace,
 		ProjectRoot:         e.ProjectRoot,
 		IngressClass:        "traefik",

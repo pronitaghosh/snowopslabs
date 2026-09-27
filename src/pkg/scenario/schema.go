@@ -58,9 +58,12 @@ type Scenario struct {
 	// and CLI flag scenarios without it.
 	Verified      bool          `yaml:"verified,omitempty" json:"verified"`
 	Prerequisites Prerequisites `yaml:"prerequisites" json:"prerequisites"`
-	Runtimes      []string      `yaml:"runtimes" json:"runtimes"`
-	Components    []Component   `yaml:"components" json:"components"`
-	Explore       Explore       `yaml:"explore" json:"explore"`
+	// Requirements is what activating it needs from the lab (memory for its
+	// own workloads, agents, exclusivity); see Requirements.
+	Requirements Requirements `yaml:"requirements,omitempty" json:"requirements"`
+	Runtimes     []string     `yaml:"runtimes" json:"runtimes"`
+	Components   []Component  `yaml:"components" json:"components"`
+	Explore      Explore      `yaml:"explore" json:"explore"`
 
 	// Format v2 (optional)
 	Objectives []string       `yaml:"objectives,omitempty" json:"objectives,omitempty"`
@@ -365,6 +368,9 @@ func (s *Scenario) Validate() error {
 	if !APIVersionSupported(s.APIVersion) {
 		add("unsupported apiVersion %q (supported: %s)",
 			s.APIVersion, strings.Join(SupportedScenarioAPIVersions, ", "))
+	}
+	if err := s.Requirements.Validate(); err != nil {
+		add("%v", err)
 	}
 	if len(s.Components) > 0 && len(s.Stages) > 0 {
 		add("declare either components (v1) or stages (v2), not both")

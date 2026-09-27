@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/sagar2395/snowopslabs/internal/capacity"
 	"github.com/sagar2395/snowopslabs/internal/toolchain"
 )
 
@@ -36,7 +37,7 @@ func fakeEnv(dockerInfo string) *toolchain.Fake {
 // These tests check doctor's output text as well as its exit status.
 
 func TestRunDoctor(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// A fake where every tool resolves and reports a current version, and the
 	// Docker VM is comfortably provisioned. The `docker info` rule is registered
@@ -204,12 +205,10 @@ func TestRunDoctor(t *testing.T) {
 }
 
 func TestDockerCapacity(t *testing.T) {
-	ctx := context.Background()
-
-	fake := func(info string, exit int, context string) *toolchain.Fake {
+	fake := func(info string, exit int, dockerContext string) *toolchain.Fake {
 		f := toolchain.NewFake()
 		f.Available = map[string]string{"docker": "/usr/bin/docker", "colima": "/opt/homebrew/bin/colima"}
-		f.WhenArgsContain("context show", context+"\n", 0)
+		f.WhenArgsContain("context show", dockerContext+"\n", 0)
 		f.WhenArgsContain("info", info, exit)
 		return f
 	}
@@ -250,7 +249,8 @@ func TestDockerCapacity(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			line, problem, note := dockerCapacity(ctx, tt.fake, tt.goos, tt.wsl)
+			got := dockerCapacity(t.Context(), tt.fake, capacity.Platform{GOOS: tt.goos, WSL: tt.wsl})
+			line, problem, note := got.line, got.problem, got.note
 			check := func(field, got, want string) {
 				if want == "" && got != "" {
 					t.Errorf("%s = %q, want empty", field, got)
@@ -271,8 +271,8 @@ func TestDockerCapacity(t *testing.T) {
 		f := toolchain.NewFake()
 		f.Available = map[string]string{}
 		f.LookPathErr = errors.New("not found")
-		if line, problem, note := dockerCapacity(ctx, f, "linux", false); line+problem+note != "" {
-			t.Errorf("want nothing, got %q %q %q", line, problem, note)
+		if got := dockerCapacity(t.Context(), f, capacity.Platform{GOOS: "linux"}); got != (dockerReport{}) {
+			t.Errorf("want nothing, got %+v", got)
 		}
 	})
 }

@@ -211,20 +211,22 @@ func TestFieldNamesIsStable(t *testing.T) {
 	}
 }
 
-func TestValidateRejectsURLsBuiltFromDomainSuffix(t *testing.T) {
+func TestValidate_URLsNeedIngressURLSuffix(t *testing.T) {
 	tests := []struct {
-		in      string
+		name    string
+		input   string
 		wantErr bool
 	}{
-		{"http://grafana.{{.DomainSuffix}}/d/x", true},
-		{"curl https://{{.WorkloadName}}.{{ .DomainSuffix }}/health", true},
-		{"http://grafana.{{.IngressURLSuffix}}/d/x", false},
-		{"host: {{.WorkloadName}}.{{.DomainSuffix}}", false},
+		{name: "url from domain suffix", input: "http://grafana.{{.DomainSuffix}}/d/x", wantErr: true},
+		{name: "url with templated host", input: "curl https://{{.WorkloadName}}.{{ .DomainSuffix }}/health", wantErr: true},
+		{name: "url from ingress url suffix", input: "http://grafana.{{.IngressURLSuffix}}/d/x", wantErr: false},
+		{name: "hostname from domain suffix", input: "host: {{.WorkloadName}}.{{.DomainSuffix}}", wantErr: false},
 	}
 	for _, tt := range tests {
-		err := Validate(tt.in)
-		if (err != nil) != tt.wantErr {
-			t.Errorf("Validate(%q) = %v, wantErr %v", tt.in, err, tt.wantErr)
-		}
+		t.Run(tt.name, func(t *testing.T) {
+			if err := Validate(tt.input); (err != nil) != tt.wantErr {
+				t.Errorf("Validate(%q) = %v, wantErr %v", tt.input, err, tt.wantErr)
+			}
+		})
 	}
 }

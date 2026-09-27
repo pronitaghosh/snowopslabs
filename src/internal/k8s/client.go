@@ -453,20 +453,38 @@ func Reachable(ctx context.Context) error {
 	return err
 }
 
+// maxReasonRunes bounds the reason shown for an unreachable cluster, so a long
+// kubectl message cannot flood the UI banner.
+const maxReasonRunes = 200
+
 // unreachableReason turns a failed probe into one short line, such as
-// "net/http: TLS handshake timeout".
+// "net/http: TLS handshake timeout": the last line kubectl printed, without
+// its generic prefix.
 func unreachableReason(err error) string {
 	msg := err.Error()
+	var ke *kubectlError
+	if errors.As(err, &ke) {
+		msg = ke.stderr
+	}
 	if i := strings.LastIndex(msg, "\n"); i >= 0 {
 		msg = msg[i+1:]
 	}
-	msg = strings.TrimPrefix(msg, "exit status 1: ")
 	msg = strings.TrimPrefix(msg, "Unable to connect to the server: ")
-	if len(msg) > 200 {
-		msg = msg[:200] + "…"
+	if runes := []rune(msg); len(runes) > maxReasonRunes {
+		msg = string(runes[:maxReasonRunes]) + "…"
 	}
 	return msg
 }
+
+// kubectlError is a failed kubectl run together with what it printed to
+// stderr, which is the useful part of the failure.
+type kubectlError struct {
+	err    error
+	stderr string
+}
+
+func (e *kubectlError) Error() string { return e.err.Error() + ": " + e.stderr }
+func (e *kubectlError) Unwrap() error { return e.err }
 
 func RunKubectl(ctx context.Context, args ...string) (string, error) {
 	return kubectl(ctx, args...)
@@ -485,7 +503,7 @@ func kubectl(ctx context.Context, args ...string) (string, error) {
 		// Keep kubectl's own explanation; "exit status 1" alone says nothing.
 		var ee *exec.ExitError
 		if errors.As(err, &ee) && len(bytes.TrimSpace(ee.Stderr)) > 0 {
-			return "", fmt.Errorf("%w: %s", err, strings.TrimSpace(string(ee.Stderr)))
+			return "", &kubectlError{err: err, stderr: strings.TrimSpace(string(ee.Stderr))}
 		}
 		return "", err
 	}

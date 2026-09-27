@@ -5,6 +5,7 @@ package cli
 import (
 	"context"
 	"fmt"
+	"io"
 
 	"github.com/spf13/cobra"
 
@@ -21,7 +22,7 @@ var statusCmd = &cobra.Command{
 		fmt.Println("=== Cluster ===")
 		info, err := k8s.GetClusterInfo(ctx)
 		if err != nil || !info.Connected {
-			printUnreachable(info)
+			printUnreachable(cmd.OutOrStdout(), info)
 			return nil
 		}
 		fmt.Printf("  Context:  %s\n", info.Context)
@@ -57,21 +58,21 @@ var statusCmd = &cobra.Command{
 }
 
 // printUnreachable explains a cluster that cannot be reached. Platform and app
-// state are not printed: without the API they would all read "not installed".
-func printUnreachable(info *k8s.ClusterInfo) {
-	switch {
-	case info == nil || info.Context == "":
-		fmt.Println("  Status:   NO CLUSTER (no kubectl context is set)")
-		fmt.Printf("  Profile:  %s\n", cfg.Profile)
-		fmt.Println("\nCreate the lab with: labctl init")
-	default:
-		fmt.Printf("  Status:   UNREACHABLE (%s)\n", info.Error)
-		fmt.Printf("  Context:  %s\n", info.Context)
-		fmt.Printf("  Profile:  %s\n", cfg.Profile)
-		fmt.Println("\nThe cluster is configured but not answering. Usually Docker is stopped (after a")
-		fmt.Println("reboot) or short of memory. 'labctl doctor' checks Docker; 'labctl init' brings")
-		fmt.Println("the lab back without losing it.")
+// state are left out because without the API every component would read "not
+// installed".
+func printUnreachable(out io.Writer, info *k8s.ClusterInfo) {
+	if info == nil || info.Context == "" {
+		fmt.Fprintln(out, "  Status:   NO CLUSTER (no kubectl context is set)")
+		fmt.Fprintf(out, "  Profile:  %s\n", cfg.Profile)
+		fmt.Fprintln(out, "\nCreate the lab with: labctl init")
+		return
 	}
+	fmt.Fprintf(out, "  Status:   UNREACHABLE (%s)\n", info.Error)
+	fmt.Fprintf(out, "  Context:  %s\n", info.Context)
+	fmt.Fprintf(out, "  Profile:  %s\n", cfg.Profile)
+	fmt.Fprintln(out, "\nThe cluster is configured but not answering. Usually Docker is stopped (after a")
+	fmt.Fprintln(out, "reboot) or short of memory. 'labctl doctor' checks Docker; 'labctl init' brings")
+	fmt.Fprintln(out, "the lab back without losing it.")
 }
 
 // providerState reports a platform component's state from its pods'

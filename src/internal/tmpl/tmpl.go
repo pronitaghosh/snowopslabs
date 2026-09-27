@@ -29,7 +29,7 @@ type Context struct {
 	DomainSuffix string
 	// IngressURLSuffix is DomainSuffix plus the ingress port when it is not
 	// 80, e.g. "k3d.local:8080", so "http://grafana.{{.IngressURLSuffix}}"
-	// still works when the runtime fell back from a busy port 80.
+	// works whichever port the ingress listens on.
 	IngressURLSuffix string
 	// MonitoringNamespace is where the monitoring stack lives, e.g. "monitoring".
 	MonitoringNamespace string

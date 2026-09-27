@@ -4,6 +4,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -112,23 +113,23 @@ func platformUpRun(cmd *cobra.Command, args []string) error {
 
 	// Metrics and Grafana are both attempted even if one fails, so a single
 	// run reports everything that is wrong.
-	var failed []string
+	var errs []error
 	if cfg.MetricsProvider != "" {
 		fmt.Printf("Installing metrics (%s)...\n", cfg.MetricsProvider)
 		if err := reg.Install("monitoring/metrics", cfg.MetricsProvider, scriptExec); err != nil {
-			failed = append(failed, fmt.Sprintf("metrics (%s): %v", cfg.MetricsProvider, err))
+			errs = append(errs, fmt.Errorf("metrics (%s): %w", cfg.MetricsProvider, err))
 		}
 	}
 
 	fmt.Println("Installing grafana...")
 	if err := reg.Install("monitoring", "grafana", scriptExec); err != nil {
-		failed = append(failed, fmt.Sprintf("grafana: %v", err))
+		errs = append(errs, fmt.Errorf("grafana: %w", err))
 	}
 
-	if len(failed) > 0 {
-		return fmt.Errorf("the platform did not install cleanly:\n  - %s\n"+
+	if err := errors.Join(errs...); err != nil {
+		return fmt.Errorf("the platform did not install cleanly:\n%w\n"+
 			"A \"TLS handshake timeout\" or pods stuck Pending mean Docker is short of memory — check with 'labctl doctor'.\n"+
-			"Installs are safe to repeat: re-run 'labctl platform up' (or 'labctl init')", strings.Join(failed, "\n  - "))
+			"Installs are safe to repeat: re-run 'labctl platform up' (or 'labctl init')", err)
 	}
 	fmt.Println("\nPlatform installed successfully.")
 	return nil

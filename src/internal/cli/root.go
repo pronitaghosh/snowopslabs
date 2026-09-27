@@ -226,7 +226,9 @@ func SetVersion(v string) {
 // build-time -X main.version ldflag (see cmd/labctl/main.go).
 func Execute(version string) {
 	SetVersion(version)
-	addUserBinToPath()
+	if err := addUserBinToPath(); err != nil {
+		slog.Warn("could not add ~/.local/bin to PATH; tools installed there may not be found", "err", err)
+	}
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
 	}
@@ -236,14 +238,20 @@ func Execute(version string) {
 // and k3d on Linux and WSL, at the front of labctl's own PATH, so a tool it has
 // just installed works before the user's shell has that directory. The user's
 // PATH is kept in SNOWOPS_ORIGINAL_PATH so setup-tools can tell them to add it.
-func addUserBinToPath() {
+// Without a home directory there is nothing to add.
+func addUserBinToPath() error {
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return
+		return nil //nolint:nilerr // no home directory means no ~/.local/bin to add
 	}
 	path := os.Getenv("PATH")
-	_ = os.Setenv("SNOWOPS_ORIGINAL_PATH", path)
-	_ = os.Setenv("PATH", withUserBin(path, filepath.Join(home, ".local", "bin")))
+	if err := os.Setenv("SNOWOPS_ORIGINAL_PATH", path); err != nil {
+		return fmt.Errorf("setting SNOWOPS_ORIGINAL_PATH: %w", err)
+	}
+	if err := os.Setenv("PATH", withUserBin(path, filepath.Join(home, ".local", "bin"))); err != nil {
+		return fmt.Errorf("setting PATH: %w", err)
+	}
+	return nil
 }
 
 // withUserBin prepends dir to path unless it is already there.

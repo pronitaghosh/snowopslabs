@@ -157,8 +157,8 @@ cluster_record_file() {
 }
 
 # record_ingress_ports <cluster> <container> — write the host ports mapped to
-# the container's :80 and :443. When 80/443 were busy the runtime fell back to
-# other ports, and every URL and check labctl builds must follow them.
+# the container's :80 and :443. They differ from 80/443 when those are busy,
+# and labctl builds every URL and check from this record.
 record_ingress_ports() {
   local cluster="$1" container="$2" http https file
   http="$(docker port "$container" 80/tcp 2>/dev/null | head -n 1 | sed 's/.*://')"

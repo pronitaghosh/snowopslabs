@@ -129,11 +129,13 @@ func Load(projectRoot string) (*Config, error) {
 	cfg.Profile = profile
 	cfg.ClusterName = resolveEnv(fileVals, "CLUSTER_NAME", "snowops")
 
-	// The ports the runtime actually bound. When 80/443 were taken it fell
-	// back to others, and every URL and check must follow; this record beats
-	// .env, and only a real environment variable beats it.
+	// The runtime records the ingress ports it bound, which differ from the
+	// configured ones when those are busy. The record overrides .env; only a
+	// real environment variable overrides the record.
 	clusterVals := map[string]string{}
-	mergeEnvFile(clusterVals, ClusterStateFile(cfg.ClusterName))
+	if path, err := ClusterStateFile(cfg.ClusterName); err == nil {
+		mergeEnvFile(clusterVals, path)
+	}
 	for _, k := range []string{"HTTP_PORT", "HTTPS_PORT"} {
 		if v := clusterVals[k]; v != "" {
 			fileVals[k] = v
@@ -334,19 +336,27 @@ func resolveEnv(fileVals map[string]string, key, defaultVal string) string {
 	return defaultVal
 }
 
-// ClusterStateFile is where a local runtime records what it created for a
-// cluster, such as the ingress ports it bound: $SNOWOPS_HOME/clusters/<name>.env
-// (default ~/.snowops). runtimes/_lib/docker.sh writes it; teardown removes it.
-func ClusterStateFile(clusterName string) string {
-	home := os.Getenv("SNOWOPS_HOME")
-	if home == "" {
-		dir, err := os.UserHomeDir()
-		if err != nil {
-			return ""
-		}
-		home = filepath.Join(dir, ".snowops")
+// Home is labctl's own state directory: $SNOWOPS_HOME, or ~/.snowops.
+func Home() (string, error) {
+	if home := os.Getenv("SNOWOPS_HOME"); home != "" {
+		return home, nil
 	}
-	return filepath.Join(home, "clusters", clusterName+".env")
+	dir, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("locating home directory (set SNOWOPS_HOME to override): %w", err)
+	}
+	return filepath.Join(dir, ".snowops"), nil
+}
+
+// ClusterStateFile is where a local runtime records what it created for a
+// cluster, such as the ingress ports it bound: <Home>/clusters/<name>.env.
+// runtimes/_lib/docker.sh writes it and the runtime's down.sh removes it.
+func ClusterStateFile(clusterName string) (string, error) {
+	home, err := Home()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, "clusters", clusterName+".env"), nil
 }
 
 // LocalIngress reports whether lab hostnames are served on this machine's

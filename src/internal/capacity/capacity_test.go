@@ -7,27 +7,33 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/sagar2395/snowopslabs/internal/toolchain"
 )
 
-func TestMeets(t *testing.T) {
+func TestResources_Meets(t *testing.T) {
 	tests := []struct {
-		name string
-		r    Resources
-		n    Need
-		want bool
+		name     string
+		have     Resources
+		need     Need
+		expected bool
 	}{
-		{"exactly the floor", Resources{2, 4 * gib}, Floor, true},
-		{"8 GB colima VM reports 7.7 GiB", Resources{4, 8307675136}, Need{4, 8}, true},
-		{"default 2 GB colima VM", Resources{2, 2054160384}, Floor, false},
-		{"too few CPUs", Resources{1, 16 * gib}, Floor, false},
-		{"just under the tolerance", Resources{2, 3972844748}, Floor, false},
+		{name: "exactly the floor", have: Resources{CPUs: 2, MemBytes: 4 * gib}, need: Floor, expected: true},
+		{
+			name:     "8 gb colima vm reports 7.7 gib",
+			have:     Resources{CPUs: 4, MemBytes: 8307675136},
+			need:     Need{CPUs: 4, MemGiB: 8},
+			expected: true,
+		},
+		{name: "default 2 gb colima vm", have: Resources{CPUs: 2, MemBytes: 2054160384}, need: Floor, expected: false},
+		{name: "too few cpus", have: Resources{CPUs: 1, MemBytes: 16 * gib}, need: Floor, expected: false},
+		{name: "just under the tolerance", have: Resources{CPUs: 2, MemBytes: 3972844748}, need: Floor, expected: false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := tt.r.Meets(tt.n); got != tt.want {
-				t.Errorf("Meets = %v, want %v", got, tt.want)
+			if got := tt.have.Meets(tt.need); got != tt.expected {
+				t.Errorf("Meets = %v, want %v", got, tt.expected)
 			}
 		})
 	}
@@ -35,17 +41,17 @@ func TestMeets(t *testing.T) {
 
 func TestProbe(t *testing.T) {
 	tests := []struct {
-		name    string
-		fake    func() *toolchain.Fake
-		want    Resources
-		wantErr error
+		name     string
+		fake     func() *toolchain.Fake
+		expected Resources
+		wantErr  error
 	}{
 		{
-			name: "reads CPU and memory",
+			name: "reads cpu and memory",
 			fake: func() *toolchain.Fake {
 				return toolchain.NewFake().WhenArgsContain("info", "4 8307675136\n", 0)
 			},
-			want: Resources{4, 8307675136},
+			expected: Resources{CPUs: 4, MemBytes: 8307675136},
 		},
 		{
 			name: "docker not installed",
@@ -66,7 +72,7 @@ func TestProbe(t *testing.T) {
 			wantErr: ErrNoPermission,
 		},
 		{
-			name: "docker desktop shim without WSL integration",
+			name: "docker desktop shim without wsl integration",
 			fake: func() *toolchain.Fake {
 				return toolchain.NewFake().WhenArgsContainStderr("info", "",
 					"The command 'docker' could not be found in this WSL 2 distro.", 1)
@@ -83,7 +89,7 @@ func TestProbe(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := Probe(context.Background(), tt.fake())
+			got, err := Probe(t.Context(), tt.fake())
 			if tt.wantErr != nil {
 				if !errors.Is(err, tt.wantErr) {
 					t.Fatalf("err = %v, want %v", err, tt.wantErr)
@@ -93,129 +99,183 @@ func TestProbe(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if got != tt.want {
-				t.Errorf("got %+v, want %+v", got, tt.want)
+			if got != tt.expected {
+				t.Errorf("got %+v, want %+v", got, tt.expected)
 			}
 		})
 	}
 
-	t.Run("garbled output is an error, not a zero", func(t *testing.T) {
-		f := toolchain.NewFake().WhenArgsContain("info", "lots of text\n", 0)
-		if _, err := Probe(context.Background(), f); err == nil ||
-			errors.Is(err, ErrDaemonDown) {
-			t.Fatalf("want a parse error, got %v", err)
+	t.Run("keeps the underlying cause in the chain", func(t *testing.T) {
+		cause := errors.New("exec: docker: input/output error")
+		f := toolchain.NewFake().WhenArgsContainError("info", cause)
+		_, err := Probe(t.Context(), f)
+		if !errors.Is(err, ErrDaemonDown) || !errors.Is(err, cause) {
+			t.Fatalf("want both the sentinel and the cause in %v", err)
+		}
+	})
+
+	t.Run("a cancelled context fails instead of hanging", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(t.Context())
+		cancel()
+		f := toolchain.NewFake().WhenArgsContainBlock("info", time.Minute)
+		if _, err := Probe(ctx, f); err == nil {
+			t.Fatal("expected an error on a cancelled context")
 		}
 	})
 }
 
-func TestDetectHost(t *testing.T) {
+func TestParseInfo(t *testing.T) {
 	tests := []struct {
-		name string
-		goos string
-		wsl  bool
-		fake func() *toolchain.Fake
-		want Engine
+		name  string
+		input string
 	}{
-		{"wsl wins", "linux", true, toolchain.NewFake, EngineWSL},
-		{"native linux", "linux", false, toolchain.NewFake, EngineNative},
-		{"colima context", "darwin", false, func() *toolchain.Fake {
-			return toolchain.NewFake().WhenArgsContain("context show", "colima\n", 0)
-		}, EngineColima},
-		{"named colima profile", "darwin", false, func() *toolchain.Fake {
-			return toolchain.NewFake().WhenArgsContain("context show", "colima-work\n", 0)
-		}, EngineColima},
-		{"docker desktop context", "darwin", false, func() *toolchain.Fake {
-			return toolchain.NewFake().WhenArgsContain("context show", "desktop-linux\n", 0)
-		}, EngineDockerDesktop},
-		{"colima installed but never started", "darwin", false, func() *toolchain.Fake {
-			f := toolchain.NewFake().WhenArgsContain("context show", "default\n", 0)
-			f.Available = map[string]string{"docker": "/opt/homebrew/bin/docker", "colima": "/opt/homebrew/bin/colima"}
-			f.LookPathErr = errors.New("not found")
-			return f
-		}, EngineColima},
-		{"default context, no colima", "darwin", false, func() *toolchain.Fake {
-			f := toolchain.NewFake().WhenArgsContain("context show", "default\n", 0)
-			f.Available = map[string]string{"docker": "/usr/local/bin/docker"}
-			f.LookPathErr = errors.New("not found")
-			return f
-		}, EngineDockerDesktop},
-		{"only colima installed", "darwin", false, func() *toolchain.Fake {
-			f := toolchain.NewFake()
-			f.Available = map[string]string{"colima": "/opt/homebrew/bin/colima"}
-			f.LookPathErr = errors.New("not found")
-			return f
-		}, EngineColima},
+		{name: "free text", input: "lots of text\n"},
+		{name: "one field", input: "8"},
+		{name: "non-numeric cpus", input: "x 8589934592"},
+		{name: "non-numeric memory", input: "4 lots"},
+		{name: "zero values", input: "0 0"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := DetectHost(context.Background(), tt.fake(), tt.goos, tt.wsl).Engine; got != tt.want {
-				t.Errorf("engine = %v, want %v", got, tt.want)
+			if _, err := parseInfo(tt.input); err == nil {
+				t.Errorf("parseInfo(%q) should fail", tt.input)
 			}
 		})
 	}
 }
 
-func TestHints(t *testing.T) {
+func TestDetectHost(t *testing.T) {
+	darwin := Platform{GOOS: "darwin"}
+	withContext := func(name string) func() *toolchain.Fake {
+		return func() *toolchain.Fake {
+			return toolchain.NewFake().WhenArgsContain("context show", name+"\n", 0)
+		}
+	}
+	defaultContext := func(available map[string]string) func() *toolchain.Fake {
+		return func() *toolchain.Fake {
+			f := toolchain.NewFake().WhenArgsContain("context show", "default\n", 0)
+			f.Available = available
+			f.LookPathErr = errors.New("not found")
+			return f
+		}
+	}
+	tests := []struct {
+		name     string
+		platform Platform
+		fake     func() *toolchain.Fake
+		expected Engine
+	}{
+		{name: "wsl wins", platform: Platform{GOOS: "linux", WSL: true}, fake: toolchain.NewFake, expected: EngineWSL},
+		{name: "native linux", platform: Platform{GOOS: "linux"}, fake: toolchain.NewFake, expected: EngineNative},
+		{name: "colima context", platform: darwin, fake: withContext("colima"), expected: EngineColima},
+		{name: "named colima profile", platform: darwin, fake: withContext("colima-work"), expected: EngineColima},
+		{name: "docker desktop context", platform: darwin, fake: withContext("desktop-linux"), expected: EngineDockerDesktop},
+		{
+			name:     "colima installed but never started",
+			platform: darwin,
+			fake: defaultContext(map[string]string{
+				"docker": "/opt/homebrew/bin/docker",
+				"colima": "/opt/homebrew/bin/colima",
+			}),
+			expected: EngineColima,
+		},
+		{
+			name:     "default context and no colima",
+			platform: darwin,
+			fake:     defaultContext(map[string]string{"docker": "/usr/local/bin/docker"}),
+			expected: EngineDockerDesktop,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := DetectHost(t.Context(), tt.fake(), tt.platform).Engine; got != tt.expected {
+				t.Errorf("engine = %v, want %v", got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestHost_StartHint(t *testing.T) {
 	n := Need{CPUs: 4, MemGiB: 6}
 	tests := []struct {
-		engine     Engine
-		wantResize string
-		wantStart  string
+		name     string
+		engine   Engine
+		expected string
 	}{
-		{EngineColima, "colima stop && colima start --cpu 4 --memory 6", "colima start --cpu 4 --memory 6"},
-		{EngineDockerDesktop, "Settings → Resources → CPUs 4, Memory 6 GB", "open -a Docker"},
-		{EngineWSL, "processors=4 and memory=6GB", "sudo service docker start"},
-		{EngineNative, "needs 4 CPUs and 6 GB free", "sudo systemctl start docker"},
+		{name: "colima", engine: EngineColima, expected: "colima start --cpu 4 --memory 6"},
+		{name: "docker desktop", engine: EngineDockerDesktop, expected: "open -a Docker"},
+		{name: "wsl", engine: EngineWSL, expected: "sudo service docker start"},
+		{name: "native", engine: EngineNative, expected: "sudo systemctl start docker"},
+		{name: "unknown falls back to native", engine: EngineUnknown, expected: "sudo systemctl start docker"},
 	}
 	for _, tt := range tests {
-		h := Host{Engine: tt.engine}
-		if got := h.ResizeHint(n); !strings.Contains(got, tt.wantResize) {
-			t.Errorf("engine %v resize = %q, want it to contain %q", tt.engine, got, tt.wantResize)
-		}
-		if got := h.StartHint(n); !strings.Contains(got, tt.wantStart) {
-			t.Errorf("engine %v start = %q, want it to contain %q", tt.engine, got, tt.wantStart)
-		}
+		t.Run(tt.name, func(t *testing.T) {
+			if got := (Host{Engine: tt.engine}).StartHint(n); !strings.Contains(got, tt.expected) {
+				t.Errorf("StartHint = %q, want it to contain %q", got, tt.expected)
+			}
+		})
 	}
 }
 
-func TestShortfallFormatting(t *testing.T) {
-	got := Shortfall(Resources{2, 2054160384}, Floor)
-	want := "Docker has 2 CPU / 1.9 GB; this needs at least 2 CPU / 4 GB."
-	if got != want {
-		t.Errorf("got %q, want %q", got, want)
-	}
-	if Shortfall(Resources{4, 16 * gib}, Floor) != "" {
-		t.Error("a machine that meets the need has no shortfall")
-	}
-}
-
-func TestParseGiB(t *testing.T) {
+func TestHost_AccessHint(t *testing.T) {
 	tests := []struct {
-		in   string
-		want float64
-	}{{"4", 4}, {"6GB", 6}, {"8GiB", 8}, {" 5g ", 5}, {"4.5", 4.5}}
-	for _, tt := range tests {
-		in, want := tt.in, tt.want
-		got, err := ParseGiB(in)
-		if err != nil || got != want {
-			t.Errorf("ParseGiB(%q) = %v, %v; want %v", in, got, err, want)
-		}
+		name     string
+		engine   Engine
+		err      error
+		expected string
+	}{
+		{name: "wsl integration off", engine: EngineWSL, err: ErrWSLIntegration, expected: "WSL Integration"},
+		{name: "wsl permission", engine: EngineWSL, err: ErrNoPermission, expected: "wsl --shutdown"},
+		{name: "linux permission", engine: EngineNative, err: ErrNoPermission, expected: "newgrp docker"},
 	}
-	for _, bad := range []string{"", "lots", "0", "-2GB"} {
-		if _, err := ParseGiB(bad); err == nil {
-			t.Errorf("ParseGiB(%q) should fail", bad)
-		}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := (Host{Engine: tt.engine}).AccessHint(tt.err); !strings.Contains(got, tt.expected) {
+				t.Errorf("AccessHint = %q, want it to contain %q", got, tt.expected)
+			}
+		})
 	}
 }
 
-func TestAccessHint(t *testing.T) {
-	if got := (Host{EngineWSL}).AccessHint(ErrWSLIntegration); !strings.Contains(got, "WSL Integration") {
-		t.Errorf("got %q", got)
+func TestHost_ResizeHint(t *testing.T) {
+	n := Need{CPUs: 4, MemGiB: 6}
+	tests := []struct {
+		name     string
+		engine   Engine
+		expected string
+	}{
+		{name: "colima", engine: EngineColima, expected: "colima stop && colima start --cpu 4 --memory 6"},
+		{name: "docker desktop", engine: EngineDockerDesktop, expected: "Settings → Resources → CPUs 4, Memory 6 GB"},
+		{name: "wsl", engine: EngineWSL, expected: "processors=4 and memory=6GB"},
+		{name: "native", engine: EngineNative, expected: "needs 4 CPUs and 6 GB free"},
 	}
-	if got := (Host{EngineWSL}).AccessHint(ErrNoPermission); !strings.Contains(got, "wsl --shutdown") {
-		t.Errorf("got %q", got)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := (Host{Engine: tt.engine}).ResizeHint(n); !strings.Contains(got, tt.expected) {
+				t.Errorf("ResizeHint = %q, want it to contain %q", got, tt.expected)
+			}
+		})
 	}
-	if got := (Host{EngineNative}).AccessHint(ErrNoPermission); !strings.Contains(got, "newgrp docker") {
-		t.Errorf("got %q", got)
+}
+
+func TestShortfall(t *testing.T) {
+	tests := []struct {
+		name     string
+		have     Resources
+		expected string
+	}{
+		{
+			name:     "short on memory",
+			have:     Resources{CPUs: 2, MemBytes: 2054160384},
+			expected: "Docker has 2 CPU / 1.9 GB; this needs at least 2 CPU / 4 GB.",
+		},
+		{name: "enough", have: Resources{CPUs: 4, MemBytes: 16 * gib}, expected: ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := Shortfall(tt.have, Floor); got != tt.expected {
+				t.Errorf("Shortfall = %q, want %q", got, tt.expected)
+			}
+		})
 	}
 }

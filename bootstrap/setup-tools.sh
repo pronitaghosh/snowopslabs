@@ -388,9 +388,9 @@ install_docker_linux() {
     fi
   fi
 
-  # Add current user to the docker group for non-root access. The group only
-  # applies to new login sessions, so this run cannot use Docker yet: stop with
-  # the next step instead of timing out on a daemon we are not allowed to use.
+  # Add the current user to the docker group for non-root access. The group
+  # only applies to new login sessions, so this session cannot use Docker yet;
+  # stop and tell the user what to do next.
   local current_user="${USER:-$(id -un)}"
   if ! id -nG "$current_user" 2>/dev/null | grep -qw docker; then
     sudo usermod -aG docker "$current_user"

@@ -81,7 +81,7 @@ if kind get clusters 2>/dev/null | grep -qx "$CLUSTER_NAME"; then
   waited=0
   until kind_reachable; do
     if [ "$waited" -ge "$REACHABLE_WAIT" ]; then
-      # Never delete an existing cluster on our own: it holds the user's lab.
+      # The cluster holds the user's lab, so it is left in place; 'labctl reset' rebuilds it.
       echo "ERROR: cluster '$CLUSTER_NAME' exists but its API server is not answering." >&2
       echo "  To rebuild the lab from scratch (this loses its apps and scenarios): labctl reset" >&2
       exit 1

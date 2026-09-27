@@ -135,8 +135,7 @@ dead_nodes() {
 
 
 # wait_until_reachable <seconds> — succeed once the API answers. After Docker
-# or the colima VM restarts, k3s takes a minute or more to serve again; judging
-# it sooner once deleted a perfectly good lab.
+# or the colima VM restarts, k3s takes a minute or more to serve again.
 wait_until_reachable() {
   local limit="$1" waited=0
   until cluster_reachable; do
@@ -243,7 +242,7 @@ create_cluster() {
   fi
 
   # Pull the images first, with progress and a stall timeout: k3d pulls them
-  # silently, so a stalled download used to look like a hung `init`.
+  # silently, so a stalled download would otherwise look like a hang.
   echo "Downloading cluster images (first run only, a few hundred MB)..."
   local images=() img
   while IFS= read -r img; do
@@ -267,13 +266,10 @@ create_cluster() {
   normalize_apiserver_host
 }
 
-# An existing cluster is only worth keeping if its API answers. k3d can leave a
-# cluster half-built (containers present but the load-balancer or kubeconfig
-# broken). The old code assumed "exists" meant "usable" and ran
-# `kubectl config use-context` against a context that no longer existed, which
-# aborts `make init` under `set -e`. Instead: refresh the kubeconfig entry, and
-# skip creation only when the API is reachable. A broken cluster is recreated
-# rather than left to fail every step that follows.
+# An existing cluster is brought back rather than replaced: its kubeconfig
+# entry is refreshed, an unhealthy cluster is restarted in order, and every
+# node must stay Ready before creation is skipped. If it still cannot be
+# reached, the script stops and points at `labctl reset`.
 # lab_healthy is the quick look: API answering, k3s in every node container,
 # and every node Ready.
 lab_healthy() {
@@ -285,8 +281,7 @@ lab_healthy() {
 # restart_in_order restarts the cluster the way k3d does it: servers first,
 # waited for, then agents. After Docker or the colima VM restarts, Docker brings
 # every node back at once, and an agent that starts while its server is still
-# starting can fail for good ("failed to find interface with specified node
-# ip"); restarting nodes one by one in no order repeats the same race.
+# starting can fail for good ("failed to find interface with specified node ip").
 restart_in_order() {
   echo "Restarting the cluster in order (servers, then agents)..."
   k3d cluster stop "$CLUSTER_NAME" >/dev/null 2>&1 || true
@@ -304,8 +299,8 @@ if k3d cluster list "$CLUSTER_NAME" &>/dev/null; then
     restart_in_order
   fi
   if ! wait_until_reachable "$REACHABLE_WAIT"; then
-    # Never delete an existing cluster on our own: it holds the user's apps,
-    # scenarios and dashboards. Rebuilding is their call.
+    # The cluster holds the user's apps, scenarios and dashboards, so it is
+    # left in place; `labctl reset` rebuilds it.
     echo "ERROR: cluster '$CLUSTER_NAME' exists but its API server is not answering." >&2
     echo "  Check Docker's memory with 'labctl doctor' and the nodes with 'docker ps'." >&2
     echo "  To rebuild the lab from scratch (this loses its apps and scenarios): labctl reset" >&2

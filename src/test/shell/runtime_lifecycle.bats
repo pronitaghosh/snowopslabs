@@ -52,9 +52,8 @@ docker_recovers_after_restart() {
 }
 
 @test "k3d up never deletes an existing cluster whose API does not answer" {
-  # After a Docker/colima restart the API takes a minute or more to answer.
-  # Recreating on a timeout once wiped a healthy lab's apps and scenarios, so
-  # up.sh restarts the cluster in order, then stops and leaves rebuilding to
+  # An existing cluster holds the user's apps and scenarios. up.sh restarts it
+  # in order and, if it still does not answer, stops and leaves rebuilding to
   # the user.
   stub_when kubectl "get --raw" 1 # /healthz probe fails
   REACHABLE_WAIT=0 run bash "$ROOT/runtimes/k3d/up.sh" testcluster
@@ -93,7 +92,7 @@ docker_recovers_after_restart() {
 }
 
 @test "k3d up restarts a node that stays NotReady, and fails loudly if it never recovers" {
-  # k3s can die a minute after a VM restart, after restart_dead_nodes looked.
+  # k3s can die a minute after a VM restart, after the first health check.
   stub_when kubectl "wait --for=condition=Ready node" 1
   stub_when kubectl "get nodes --no-headers" 0 "k3d-testcluster-agent-0   NotReady   <none>   1h   v1.33.6"
   NODE_READY_WAIT=0 NODE_CHECK_INTERVAL=0 run bash "$ROOT/runtimes/k3d/up.sh" testcluster

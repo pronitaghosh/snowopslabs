@@ -83,7 +83,10 @@ func HTTPClient(cfg *config.Config) *http.Client {
 		return host == suffix || strings.HasSuffix(host, "."+suffix)
 	}
 	dialer := &net.Dialer{Timeout: 10 * time.Second}
-	tr := http.DefaultTransport.(*http.Transport).Clone()
+	tr := &http.Transport{}
+	if base, ok := http.DefaultTransport.(*http.Transport); ok {
+		tr = base.Clone()
+	}
 	tr.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
 		if host, port, err := net.SplitHostPort(addr); err == nil && isLab(host) {
 			addr = net.JoinHostPort("127.0.0.1", port)

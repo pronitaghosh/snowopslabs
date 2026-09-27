@@ -67,54 +67,28 @@ func runDoctor(ctx context.Context, out io.Writer, runner toolchain.Runner) erro
 	}
 	_ = w.Flush()
 
-	var problems, notes []string
-	for _, r := range results {
-		if r.Detail == "" {
-			continue
-		}
-		if r.OK() {
-			if r.Status != toolchain.CheckOK {
-				notes = append(notes, r.Detail)
-			}
-			continue
-		}
-		problems = append(problems, r.Detail)
+	problems, notes := toolFindings(results)
+	docker := dockerCapacity(ctx, runner, capacity.Platform{GOOS: runtime.GOOS, WSL: isWSL()})
+	if docker.line != "" {
+		fmt.Fprintf(out, "\nDocker:   %s\n", docker.line)
 	}
-
-	dockerLine, dockerProblem, dockerNote := dockerCapacity(ctx, runner, runtime.GOOS, isWSL())
-	if dockerLine != "" {
-		fmt.Fprintf(out, "\nDocker:   %s\n", dockerLine)
+	if docker.problem != "" {
+		problems = append(problems, docker.problem)
 	}
-	if dockerProblem != "" {
-		problems = append(problems, dockerProblem)
-	}
-	if dockerNote != "" {
-		notes = append(notes, dockerNote)
+	if docker.note != "" {
+		notes = append(notes, docker.note)
 	}
 	if !hostsBlockPresent() {
 		notes = append(notes, "Ingress hostnames (e.g. http://grafana.k3d.local) won't resolve until you\n"+
 			"    run 'labctl hosts add' (one-time, needs sudo). Not needed for the UI at :3939.")
 	}
 
-	if len(notes) > 0 {
-		fmt.Fprintln(out, "\nNotes:")
-		for _, n := range notes {
-			fmt.Fprintf(out, "  - %s\n", n)
-		}
-	}
+	printBullets(out, "Notes:", "-", notes)
 	if isWSL() {
-		fmt.Fprintln(out, "\nWSL notes:")
-		cwd, _ := os.Getwd()
-		for _, n := range wslDoctorNotes(cwd) {
-			fmt.Fprintf(out, "  - %s\n", n)
-		}
+		printBullets(out, "WSL notes:", "-", wslDoctorNotes(workingDir()))
 	}
-
 	if len(problems) > 0 {
-		fmt.Fprintln(out, "\nProblems to fix:")
-		for _, p := range problems {
-			fmt.Fprintf(out, "  ✗ %s\n", p)
-		}
+		printBullets(out, "Problems to fix:", "✗", problems)
 		fmt.Fprintln(out)
 		return fmt.Errorf("%d problem(s) to fix before SnowOps Labs can run", len(problems))
 	}
@@ -125,6 +99,43 @@ func runDoctor(ctx context.Context, out io.Writer, runner toolchain.Runner) erro
 		fmt.Fprintln(out, "\n✓ Ready to run SnowOps Labs.")
 	}
 	return nil
+}
+
+// toolFindings splits the tool checks into blocking problems and notes about
+// optional tools.
+func toolFindings(results []toolchain.CheckResult) (problems, notes []string) {
+	problems, notes = []string{}, []string{}
+	for _, r := range results {
+		switch {
+		case r.Detail == "":
+		case !r.OK():
+			problems = append(problems, r.Detail)
+		case r.Status != toolchain.CheckOK:
+			notes = append(notes, r.Detail)
+		}
+	}
+	return problems, notes
+}
+
+// printBullets prints a titled list, or nothing when items is empty.
+func printBullets(out io.Writer, title, bullet string, items []string) {
+	if len(items) == 0 {
+		return
+	}
+	fmt.Fprintf(out, "\n%s\n", title)
+	for _, item := range items {
+		fmt.Fprintf(out, "  %s %s\n", bullet, item)
+	}
+}
+
+// workingDir is the current directory, or "" when it cannot be read; the
+// caller then skips the notes that depend on it.
+func workingDir() string {
+	dir, err := os.Getwd()
+	if err != nil {
+		return ""
+	}
+	return dir
 }
 
 func statusLabel(r toolchain.CheckResult) string {
@@ -146,35 +157,41 @@ func statusLabel(r toolchain.CheckResult) string {
 	}
 }
 
-// dockerCapacity checks the Docker engine against the lab's minimum. It
-// returns a summary line for the report, plus at most one problem (blocks the
-// lab) or note (worth knowing). A missing docker is left to the tool checks.
-func dockerCapacity(ctx context.Context, runner toolchain.Runner, goos string, wsl bool) (line, problem, note string) {
-	host := capacity.DetectHost(ctx, runner, goos, wsl)
+// dockerReport is doctor's view of the Docker engine: a summary line, plus at
+// most one blocking problem or one note.
+type dockerReport struct {
+	line    string
+	problem string
+	note    string
+}
+
+// dockerCapacity checks the Docker engine against capacity.Floor. A missing
+// docker is left to the tool checks, which already report it.
+func dockerCapacity(ctx context.Context, runner toolchain.Runner, p capacity.Platform) dockerReport {
+	host := capacity.DetectHost(ctx, runner, p)
 	res, err := capacity.Probe(ctx, runner)
 	switch {
 	case errors.Is(err, capacity.ErrDockerMissing):
-		return "", "", ""
+		return dockerReport{}
 	case errors.Is(err, capacity.ErrNoPermission), errors.Is(err, capacity.ErrWSLIntegration):
-		return "not usable", fmt.Sprintf("%v. Fix:\n    %s", err, host.AccessHint(err)), ""
+		return dockerReport{line: "not usable", problem: fmt.Sprintf("%v. Fix:\n    %s", err, host.AccessHint(err))}
+	case errors.Is(err, capacity.ErrDaemonDown) && host.Engine == capacity.EngineColima:
+		return dockerReport{line: "not running", note: fmt.Sprintf(
+			"colima is not running. 'labctl init' starts it for you at %s, or run:\n    %s",
+			capacity.Floor, host.StartHint(capacity.Floor))}
 	case errors.Is(err, capacity.ErrDaemonDown):
-		if host.Engine == capacity.EngineColima {
-			return "not running", "", fmt.Sprintf(
-				"colima is not running. 'labctl init' starts it for you at %s, or run:\n    %s",
-				capacity.Floor, host.StartHint(capacity.Floor))
-		}
-		return "not running", fmt.Sprintf(
-			"The Docker daemon is not running. Start it:\n    %s", host.StartHint(capacity.Floor)), ""
+		return dockerReport{line: "not running", problem: fmt.Sprintf(
+			"The Docker daemon is not running. Start it:\n    %s", host.StartHint(capacity.Floor))}
 	case err != nil:
-		return "unknown", "", fmt.Sprintf("Could not read Docker's CPU and memory: %v", err)
+		return dockerReport{line: "unknown", note: fmt.Sprintf("Could not read Docker's CPU and memory: %v", err)}
 	}
 	if short := capacity.Shortfall(res, capacity.Floor); short != "" {
-		return res.String(), fmt.Sprintf(
+		return dockerReport{line: res.String(), problem: fmt.Sprintf(
 			"%s\n    Below this the API server runs out of memory and every command fails with\n"+
-				"    \"TLS handshake timeout\". Fix:\n    %s", short, host.ResizeHint(capacity.Floor)), ""
+				"    \"TLS handshake timeout\". Fix:\n    %s", short, host.ResizeHint(capacity.Floor))}
 	}
-	return fmt.Sprintf("%s — meets the minimum (%s). Heavier scenarios say what they need.",
-		res, capacity.Floor), "", ""
+	return dockerReport{line: fmt.Sprintf("%s — meets the minimum (%s). Heavier scenarios say what they need.",
+		res, capacity.Floor)}
 }
 
 func init() {

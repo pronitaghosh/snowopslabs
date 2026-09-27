@@ -112,8 +112,10 @@ is written for AI agents, but it is the fastest orientation for a human too.
    update the runbook, and write an ADR if you made a notable decision.
    Documentation is the source of truth here — the code is expected to match it,
    and `make docs-check` gates the links and the pages the website publishes.
-8. **Comments say why, briefly.** Three lines is a lot. No task, ticket or wave
-   numbers in code — that history belongs in git and in ADRs.
+8. **Comments say what the code does and why it is needed, briefly.** Three
+   lines is a lot. Never the story behind a change (the bug that prompted it,
+   the decision, measurements, task or ticket numbers) — that history belongs
+   in git and in ADRs.
 
 Changing Go code? [docs/GO-CONVENTIONS.md](docs/GO-CONVENTIONS.md) covers the
 everyday choices: which layer owns the code, how to handle contexts and errors,
