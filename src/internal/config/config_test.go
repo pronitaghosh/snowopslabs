@@ -3,6 +3,7 @@
 package config
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -557,6 +558,59 @@ func TestHome(t *testing.T) {
 			}
 			if got != tt.expected {
 				t.Errorf("Home() = %q, want %q", got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestFindProjectRoot_InstalledLab(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("SNOWOPS_HOME", home)
+	lab := filepath.Join(home, "lab")
+	outside := t.TempDir()
+	t.Chdir(outside)
+
+	t.Run("nothing installed", func(t *testing.T) {
+		if _, err := findProjectRoot(); !errors.Is(err, ErrNoLab) {
+			t.Fatalf("err = %v, want ErrNoLab", err)
+		}
+	})
+
+	for _, d := range []string{"scenarios", "runtimes"} {
+		if err := os.MkdirAll(filepath.Join(lab, d), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Run("falls back to the installed lab", func(t *testing.T) {
+		got, err := findProjectRoot()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got != lab {
+			t.Errorf("findProjectRoot = %q, want %q", got, lab)
+		}
+	})
+}
+
+func TestContentVersion(t *testing.T) {
+	tests := []struct {
+		name     string
+		file     string
+		expected string
+	}{
+		{name: "installed release", file: "1.5.0\n", expected: "1.5.0"},
+		{name: "checkout has no version file", expected: ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			root := t.TempDir()
+			if tt.file != "" {
+				if err := os.WriteFile(filepath.Join(root, "VERSION"), []byte(tt.file), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if got := ContentVersion(root); got != tt.expected {
+				t.Errorf("ContentVersion = %q, want %q", got, tt.expected)
 			}
 		})
 	}

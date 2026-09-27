@@ -244,27 +244,63 @@ func ListApps(projectRoot string) ([]string, error) {
 	return apps, nil
 }
 
+// ErrNoLab means no lab content was found: not above the working directory
+// and not where install.sh puts it.
+var ErrNoLab = errors.New("could not find the lab content (a directory with scenarios/ and runtimes/).\n" +
+	"Run labctl inside a snowopslabs checkout, pass --project-dir <path>, or install the lab with:\n" +
+	"  curl -fsSL https://raw.githubusercontent.com/sagar2395/snowopslabs/main/install.sh | sh")
+
+// findProjectRoot locates the lab content: the nearest directory at or above
+// the working directory that has scenarios/ and runtimes/ (a checkout), or
+// else the installed lab in <Home>/lab. --project-dir overrides both.
 func findProjectRoot() (string, error) {
 	dir, err := os.Getwd()
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("reading the working directory: %w", err)
 	}
-
-	// The project root is the nearest directory with both scenarios/ and
-	// runtimes/. Keying on content rather than a Makefile also finds a checkout
-	// used with a downloaded binary. --project-dir overrides this search.
 	for {
-		if _, err := os.Stat(filepath.Join(dir, "scenarios")); err == nil {
-			if _, err := os.Stat(filepath.Join(dir, "runtimes")); err == nil {
-				return dir, nil
-			}
+		if isContentRoot(dir) {
+			return dir, nil
 		}
 		parent := filepath.Dir(dir)
 		if parent == dir {
-			return "", errors.New("could not find project root (looked for scenarios/ + runtimes/)")
+			break
 		}
 		dir = parent
 	}
+	if lab, err := InstalledLab(); err == nil && isContentRoot(lab) {
+		return lab, nil
+	}
+	return "", ErrNoLab
+}
+
+// isContentRoot reports whether dir holds the lab content.
+func isContentRoot(dir string) bool {
+	for _, sub := range []string{"scenarios", "runtimes"} {
+		if info, err := os.Stat(filepath.Join(dir, sub)); err != nil || !info.IsDir() {
+			return false
+		}
+	}
+	return true
+}
+
+// InstalledLab is where install.sh puts the lab content: <Home>/lab.
+func InstalledLab() (string, error) {
+	home, err := Home()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, "lab"), nil
+}
+
+// ContentVersion is the release the lab content at root came from, as
+// install.sh records it in root/VERSION, or "" for a checkout.
+func ContentVersion(root string) string {
+	data, err := os.ReadFile(filepath.Join(root, "VERSION")) //nolint:gosec // root is the resolved lab directory
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(data))
 }
 
 // mergeEnvFile parses a KEY=VALUE file into dst. Keys already in dst are kept,

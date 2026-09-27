@@ -5,8 +5,14 @@ Releases are cut by the **lead maintainer** (release authority is reserved — s
 
 ## What ships
 
-A release is the `labctl` CLI as a single self-contained binary with the web UI
-embedded — one artifact per platform, no separate frontend deploy. It is
+A release is the `labctl` CLI, a single self-contained binary with the web UI
+embedded, packed together with the lab content it runs — scenarios, incidents,
+learning paths, challenges, platform components, runtime and bootstrap
+scripts, apps and `config/` — under `content/` in the same archive. One
+download is a complete lab; [`install.sh`](install.sh) puts the binary in
+`~/.local/bin` and the content in `~/.snowops/lab`. goreleaser stages the
+content with `scripts/stage-release-content.sh`, which exports only committed
+files (`git archive HEAD`), so add any new top-level content directory there. It is
 cgo-free ([ADR-0002](docs/adr/0002-sqlite-persistence.md)), so all four targets
 cross-compile from any host:
 

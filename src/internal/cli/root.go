@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -71,6 +72,9 @@ var rootCmd = &cobra.Command{
 			return fmt.Errorf("loading config: %w", err)
 		}
 		slog.Debug("config loaded", "root", cfg.ProjectRoot, "profile", cfg.Profile, "cluster", cfg.ClusterName)
+		if msg := versionSkew(cmd.Root().Version, config.ContentVersion(cfg.ProjectRoot)); msg != "" {
+			fmt.Fprintln(cmd.ErrOrStderr(), msg)
+		}
 
 		scriptExec = executor.New(cfg.ProjectRoot)
 		// Pass every value from .env and runtime.env to child scripts and Make
@@ -233,6 +237,19 @@ func Execute(version string) {
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
 	}
+}
+
+// versionSkew warns when the binary and the installed lab content come from
+// different releases, which install.sh keeps in step. It says nothing for a
+// development build or a checkout, which have no release to compare.
+func versionSkew(binary, content string) string {
+	binary = strings.TrimPrefix(binary, "v")
+	content = strings.TrimPrefix(content, "v")
+	if content == "" || binary == "dev" || strings.ContainsAny(binary, "-+") || binary == content {
+		return ""
+	}
+	return fmt.Sprintf("Warning: labctl is %s but the lab content is %s. Re-run the installer to bring them in step:\n"+
+		"  curl -fsSL https://raw.githubusercontent.com/sagar2395/snowopslabs/main/install.sh | sh", binary, content)
 }
 
 // addUserBinToPath puts ~/.local/bin, where setup-tools installs kubectl, helm

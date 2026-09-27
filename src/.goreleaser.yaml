@@ -16,6 +16,9 @@ before:
     - make ui-build
     - bash -c 'mkdir -p internal/webui/dist && cp -R ui/dist/. internal/webui/dist/'
     - bash -c 'cp ../README.md ../LICENSE ../NOTICE .'
+    # The lab content (scenarios, platform, runtime scripts, …) ships in the
+    # same archive, so one download is a complete lab; install.sh unpacks it.
+    - ../scripts/stage-release-content.sh content
 
 builds:
   - id: labctl
@@ -46,6 +49,7 @@ archives:
       - README.md
       - LICENSE
       - NOTICE
+      - content/**/*
 
 checksum:
   name_template: "checksums.txt"

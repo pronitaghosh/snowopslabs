@@ -109,3 +109,26 @@ func TestWithUserBin(t *testing.T) {
 		}
 	}
 }
+
+func TestVersionSkew(t *testing.T) {
+	tests := []struct {
+		name    string
+		binary  string
+		content string
+		warns   bool
+	}{
+		{name: "same release", binary: "1.5.0", content: "1.5.0", warns: false},
+		{name: "v prefix on one side", binary: "v1.5.0", content: "1.5.0", warns: false},
+		{name: "different releases", binary: "1.5.0", content: "1.4.0", warns: true},
+		{name: "a checkout has no content version", binary: "1.5.0", content: "", warns: false},
+		{name: "a development build", binary: "dev", content: "1.4.0", warns: false},
+		{name: "a build between releases", binary: "1.4.0-4-ge74f3d4-dirty", content: "1.4.0", warns: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := versionSkew(tt.binary, tt.content); (got != "") != tt.warns {
+				t.Errorf("versionSkew(%q, %q) = %q, want warning %v", tt.binary, tt.content, got, tt.warns)
+			}
+		})
+	}
+}
