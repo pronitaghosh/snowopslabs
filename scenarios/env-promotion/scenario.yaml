@@ -152,13 +152,13 @@ snippets:
 explore:
   urls:
     - label: "Grafana — the pipeline: which tag each env asked for, and whether it landed"
-      url: "http://grafana.{{.DomainSuffix}}/d/env-promotion"
+      url: "http://grafana.{{.IngressURLSuffix}}/d/env-promotion"
     - label: "{{.WorkloadName}} /version — dev environment"
-      url: "http://{{.WorkloadName}}-dev.{{.DomainSuffix}}/version"
+      url: "http://{{.WorkloadName}}-dev.{{.IngressURLSuffix}}/version"
     - label: "{{.WorkloadName}} /version — staging environment"
-      url: "http://{{.WorkloadName}}-staging.{{.DomainSuffix}}/version"
+      url: "http://{{.WorkloadName}}-staging.{{.IngressURLSuffix}}/version"
     - label: "{{.WorkloadName}} /version — prod environment"
-      url: "http://{{.WorkloadName}}-prod.{{.DomainSuffix}}/version"
+      url: "http://{{.WorkloadName}}-prod.{{.IngressURLSuffix}}/version"
   commands:
     - label: "0. Add the three environment hostnames to /etc/hosts (asks for sudo)"
       command: "labctl hosts add"

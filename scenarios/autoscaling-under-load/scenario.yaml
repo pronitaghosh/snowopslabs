@@ -161,9 +161,9 @@ snippets:
 explore:
   urls:
     - label: "Grafana — Autoscaling dashboard (replicas vs RPS)"
-      url: "http://grafana.{{.DomainSuffix}}/d/autoscaling-under-load"
+      url: "http://grafana.{{.IngressURLSuffix}}/d/autoscaling-under-load"
     - label: "Prometheus"
-      url: "http://prometheus.{{.DomainSuffix}}"
+      url: "http://prometheus.{{.IngressURLSuffix}}"
   commands:
     - label: "1. Apply the autoscaler yourself — the snippet marked 'You apply this'"
       command: "labctl scenario info autoscaling-under-load   # copy the ScaledObject, then: kubectl apply -f -"

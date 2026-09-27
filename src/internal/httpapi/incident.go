@@ -7,27 +7,19 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"os"
 	"strconv"
 	"time"
 
 	"github.com/sagar2395/snowopslabs/internal/incident"
+	"github.com/sagar2395/snowopslabs/internal/labcheck"
 	"github.com/sagar2395/snowopslabs/pkg/checks"
 )
 
 func (s *Server) incidentRunner() *checks.Runner {
-	r := checks.NewRunner()
+	r := labcheck.NewRunner(s.cfg, s.incidents.Workload, "")
 	r.DefaultTimeout = 10 * time.Second
-	promURL := os.Getenv("PROMETHEUS_URL")
-	if promURL == "" {
-		promURL = "http://prometheus." + s.cfg.DomainSuffix
-	}
-	r.PrometheusURL = promURL
 	if s.incidents.AlertmanagerURL == "" {
-		s.incidents.AlertmanagerURL = os.Getenv("ALERTMANAGER_URL")
-		if s.incidents.AlertmanagerURL == "" {
-			s.incidents.AlertmanagerURL = "http://alertmanager." + s.cfg.DomainSuffix
-		}
+		s.incidents.AlertmanagerURL = labcheck.AlertmanagerURL(s.cfg)
 	}
 	return r
 }

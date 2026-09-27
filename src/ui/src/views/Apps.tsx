@@ -37,7 +37,8 @@ export function Apps({ notify, requestConfirm, clusterDown = false }: AppsProps)
   // shares this same cache key, so both views fetch it once.
   const { data, loading, loaded, loadError, refreshing, reload: load } = useApiQuery(qk.status, api.getStatus)
   const apps = data?.apps ?? []
-  const suffix = data?.domainSuffix ?? ''
+  // URLs keep a non-default ingress port, so prefer the URL suffix.
+  const suffix = data?.ingressUrlSuffix || data?.domainSuffix || ''
   const loggingActive = Boolean(data?.platform?.logging?.active)
   const { busy, run } = useJobRunner(notify)
   const [detail, setDetail] = useState<AppDetail | null>(null)

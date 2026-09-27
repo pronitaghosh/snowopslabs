@@ -52,6 +52,6 @@ kubectl rollout status deployment/grafana -n "$NAMESPACE" --timeout=120s || true
 
 echo "Grafana installed successfully"
 echo ""
-echo "Access Grafana at: http://grafana.${DOMAIN_SUFFIX}"
+echo "Access Grafana at: http://grafana.${INGRESS_URL_SUFFIX:-${DOMAIN_SUFFIX:-k3d.local}}"
 echo "Default credentials: admin / $GRAFANA_ADMIN_PASSWORD"
 echo "Namespace: $NAMESPACE"

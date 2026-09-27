@@ -128,6 +128,17 @@ func Load(projectRoot string) (*Config, error) {
 
 	cfg.Profile = profile
 	cfg.ClusterName = resolveEnv(fileVals, "CLUSTER_NAME", "snowops")
+
+	// The ports the runtime actually bound. When 80/443 were taken it fell
+	// back to others, and every URL and check must follow; this record beats
+	// .env, and only a real environment variable beats it.
+	clusterVals := map[string]string{}
+	mergeEnvFile(clusterVals, ClusterStateFile(cfg.ClusterName))
+	for _, k := range []string{"HTTP_PORT", "HTTPS_PORT"} {
+		if v := clusterVals[k]; v != "" {
+			fileVals[k] = v
+		}
+	}
 	cfg.HTTPPort = resolveEnv(fileVals, "HTTP_PORT", "80")
 	cfg.HTTPSPort = resolveEnv(fileVals, "HTTPS_PORT", "443")
 	cfg.LabCPUs = resolveEnv(fileVals, "LAB_CPUS", "2")
@@ -321,6 +332,40 @@ func resolveEnv(fileVals map[string]string, key, defaultVal string) string {
 		return v
 	}
 	return defaultVal
+}
+
+// ClusterStateFile is where a local runtime records what it created for a
+// cluster, such as the ingress ports it bound: $SNOWOPS_HOME/clusters/<name>.env
+// (default ~/.snowops). runtimes/_lib/docker.sh writes it; teardown removes it.
+func ClusterStateFile(clusterName string) string {
+	home := os.Getenv("SNOWOPS_HOME")
+	if home == "" {
+		dir, err := os.UserHomeDir()
+		if err != nil {
+			return ""
+		}
+		home = filepath.Join(dir, ".snowops")
+	}
+	return filepath.Join(home, "clusters", clusterName+".env")
+}
+
+// LocalIngress reports whether lab hostnames are served on this machine's
+// loopback (k3d, kind) rather than by a real ingress (incluster).
+func (c *Config) LocalIngress() bool { return c.Profile != "incluster" }
+
+// IngressURLSuffix is what follows "<name>." in a lab URL: the domain suffix,
+// plus the ingress port when it is not 80 (e.g. "k3d.local:8080").
+func (c *Config) IngressURLSuffix() string {
+	if c.HTTPPort == "" || c.HTTPPort == "80" {
+		return c.DomainSuffix
+	}
+	return c.DomainSuffix + ":" + c.HTTPPort
+}
+
+// IngressURL is the browser URL for a lab hostname, e.g. "grafana" →
+// "http://grafana.k3d.local" or "http://grafana.k3d.local:8080".
+func (c *Config) IngressURL(name string) string {
+	return "http://" + name + "." + c.IngressURLSuffix()
 }
 
 // availableProfiles lists valid profile directory names under runtimes/.

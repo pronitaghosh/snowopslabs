@@ -125,7 +125,7 @@ snippets:
 explore:
   urls:
     - label: "Grafana — node drain: success rate, cordons and pod placement"
-      url: "http://grafana.{{.DomainSuffix}}/d/node-drain-drill"
+      url: "http://grafana.{{.IngressURLSuffix}}/d/node-drain-drill"
   commands:
     - label: "1. Apply your PodDisruptionBudget (nothing stages it)"
       command: "labctl scenario render node-drain-drill manifests/baseline.yaml --app {{.WorkloadName}} | kubectl apply -f -"

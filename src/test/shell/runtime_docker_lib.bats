@@ -23,6 +23,12 @@ echo "docker $*" >>"$STATE/calls"
 case "$1" in
   info) [ -f "$STATE/running" ] ;;
   image) exit 1 ;;
+  port)
+    [ -n "${LB_MISSING:-}" ] && { echo "Error: No such container: $2" >&2; exit 1; }
+    case "$3" in
+      80/tcp) printf '0.0.0.0:%s\n[::]:%s\n' "${LB_HTTP:-80}" "${LB_HTTP:-80}" ;;
+      443/tcp) printf '0.0.0.0:%s\n' "${LB_HTTPS:-443}" ;;
+    esac ;;
   pull)
     case "${PULL_MODE:-ok}" in
       stall) sleep 30 ;;
@@ -118,4 +124,27 @@ lib() {
 @test "prepull succeeds on a healthy network" {
   run lib prepull_images rancher/k3s:v1 ghcr.io/k3d-io/k3d-proxy:5.8.3
   [ "$status" -eq 0 ]
+}
+
+@test "the ingress ports a fallback cluster bound are recorded for labctl" {
+  export SNOWOPS_HOME="$STUB_DIR/snowops"
+  LB_HTTP=8080 LB_HTTPS=8443 run lib record_ingress_ports lab k3d-lab-serverlb
+  [ "$status" -eq 0 ]
+  [ "$(cat "$SNOWOPS_HOME/clusters/lab.env")" = "$(printf 'HTTP_PORT=8080\nHTTPS_PORT=8443')" ]
+}
+
+@test "forgetting a cluster removes its record" {
+  export SNOWOPS_HOME="$STUB_DIR/snowops"
+  mkdir -p "$SNOWOPS_HOME/clusters"
+  echo "HTTP_PORT=8080" >"$SNOWOPS_HOME/clusters/lab.env"
+  run lib forget_cluster lab
+  [ "$status" -eq 0 ]
+  [ ! -e "$SNOWOPS_HOME/clusters/lab.env" ]
+}
+
+@test "no mapped port writes no record" {
+  export SNOWOPS_HOME="$STUB_DIR/snowops"
+  LB_MISSING=1 run lib record_ingress_ports lab missing-container
+  [ "$status" -eq 0 ]
+  [ ! -e "$SNOWOPS_HOME/clusters/lab.env" ]
 }

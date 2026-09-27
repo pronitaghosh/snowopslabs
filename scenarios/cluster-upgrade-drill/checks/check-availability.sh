@@ -21,7 +21,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 WORKLOAD="${WORKLOAD_NAME}"
 METRIC="${WORKLOAD_METRIC:-http_server_request_duration_seconds}"
-PROM="${PROMETHEUS_URL:-http://prometheus.${DOMAIN_SUFFIX:-k3d.local}}"
+PROM="${PROMETHEUS_URL:-http://prometheus.${INGRESS_URL_SUFFIX:-${DOMAIN_SUFFIX:-k3d.local}}}"
 SLO="${AVAILABILITY_SLO:-0.99}"
 MIN_RPS="${UPGRADE_MIN_RPS:-0.5}"
 

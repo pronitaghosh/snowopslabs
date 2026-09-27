@@ -148,6 +148,8 @@ export interface StatusResponse {
   platform: PlatformStatus
   apps: AppInfo[] | null
   domainSuffix: string
+  /** domainSuffix plus the ingress port when it is not 80 — build URLs from this. */
+  ingressUrlSuffix?: string
 }
 
 // ── Scenarios ────────────────────────────────────────────────────────────────

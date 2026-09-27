@@ -81,7 +81,7 @@ func TestValidate(t *testing.T) {
 	}{
 		{name: "no template", input: "plain string"},
 		{name: "empty", input: ""},
-		{name: "known built-in", input: "http://grafana.{{.DomainSuffix}}"},
+		{name: "known built-in", input: "http://grafana.{{.IngressURLSuffix}}"},
 		{name: "known workload var", input: "deployment/{{.WorkloadName}}"},
 		{name: "several known vars", input: "{{.WorkloadName}}.{{.WorkloadNamespace}}:{{.WorkloadPort}}"},
 		{name: "spaces inside braces", input: "{{ .IngressClass }}"},
@@ -207,6 +207,24 @@ func TestFieldNamesIsStable(t *testing.T) {
 	for _, n := range sorted {
 		if n == "" || strings.ToUpper(n[:1]) != n[:1] {
 			t.Errorf("field %q is not exported", n)
+		}
+	}
+}
+
+func TestValidateRejectsURLsBuiltFromDomainSuffix(t *testing.T) {
+	tests := []struct {
+		in      string
+		wantErr bool
+	}{
+		{"http://grafana.{{.DomainSuffix}}/d/x", true},
+		{"curl https://{{.WorkloadName}}.{{ .DomainSuffix }}/health", true},
+		{"http://grafana.{{.IngressURLSuffix}}/d/x", false},
+		{"host: {{.WorkloadName}}.{{.DomainSuffix}}", false},
+	}
+	for _, tt := range tests {
+		err := Validate(tt.in)
+		if (err != nil) != tt.wantErr {
+			t.Errorf("Validate(%q) = %v, wantErr %v", tt.in, err, tt.wantErr)
 		}
 	}
 }

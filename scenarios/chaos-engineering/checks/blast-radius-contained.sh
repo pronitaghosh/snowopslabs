@@ -17,7 +17,7 @@ set -eu
 NS="${WORKLOAD_NAMESPACE}"
 WORKLOAD="${WORKLOAD_NAME}"
 METRIC="${WORKLOAD_METRIC:-http_server_request_duration_seconds}"
-PROM="${PROMETHEUS_URL:-http://prometheus.${DOMAIN_SUFFIX:-k3d.local}}"
+PROM="${PROMETHEUS_URL:-http://prometheus.${INGRESS_URL_SUFFIX:-${DOMAIN_SUFFIX:-k3d.local}}}"
 WITNESS="chaos-experiment-witness"
 
 promq() {

@@ -405,6 +405,17 @@ func HelmReleaseExists(ctx context.Context, namespace, release string) bool {
 	return err == nil && strings.TrimSpace(out) != ""
 }
 
+// HelmReleaseDeployed reports whether release has a revision in the
+// "deployed" state, which a release left by a failed install does not.
+func HelmReleaseDeployed(ctx context.Context, namespace, release string) bool {
+	if namespace == "" || release == "" {
+		return false
+	}
+	out, err := kubectl(ctx, "get", "secret", "-n", namespace,
+		"-l", "owner=helm,name="+release+",status=deployed", "--no-headers")
+	return err == nil && strings.TrimSpace(out) != ""
+}
+
 // GetCurrentContext returns the current kubectl context name.
 func GetCurrentContext(ctx context.Context) (string, error) {
 	return kubectl(ctx, "config", "current-context")

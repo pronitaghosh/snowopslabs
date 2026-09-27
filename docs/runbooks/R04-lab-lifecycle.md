@@ -229,13 +229,34 @@ restart policy never fires, and the node stays `NotReady` until someone
 restarts the container by hand. The second start works: by then the Node object
 carries the address the container actually has.
 
-`runtimes/k3d/up.sh` does this itself (`restart_dead_nodes`), so `labctl init` /
-`make init` is the recovery — it restarts exactly the node containers with no
-k3s process and waits for every node to report Ready. This runs *before* the
-reachability probe on purpose: a dead server node would otherwise read as an
-unreachable cluster and be deleted along with the whole lab.
+Restarting one node at a time is not enough. Docker brings every node back at
+once, so an agent can start while its server is still starting, and after the
+restart a node's container may hold a different address from the one its Node
+object records. k3s's network policy controller reads the recorded address
+before the kubelet can correct it, so that node shuts down on every restart.
 
-Detecting it by hand is the same test the script makes:
+`runtimes/k3d/up.sh` handles all of it, so `labctl init` / `make init` is the
+recovery:
+
+1. If the cluster is not healthy (API not answering, a node container with no
+   k3s, or a node not Ready), it restarts the cluster **in order** with
+   `k3d cluster stop` + `k3d cluster start --wait`: servers first, then agents.
+2. It then requires every node to run k3s and be Ready for six samples in a row,
+   10 s apart — a node can die a minute after starting while its Node still
+   reads Ready from before.
+3. A node that is not healthy is restarted; one whose container IP differs from
+   its Node's `InternalIP` has its Node object deleted first, so it registers
+   again at its current address (same name, so PVs pinned to it stay valid).
+4. It **never deletes the cluster**. If it still cannot be brought back it stops
+   and points at `labctl reset`, which rebuilds from scratch on purpose.
+
+`labctl init` then skips platform installs that are already deployed and waits
+for their pods to be Ready. Measured on colima (2 CPU / 4 GB, 3 nodes, with
+go-api and observability-sre active): three consecutive `colima stop` → `labctl
+init` cycles each recovered in about two minutes with the app, the scenario and
+every pod intact.
+
+Detecting a dead node by hand is the same test the script makes:
 
 ```sh
 docker top k3d-snowops-agent-0 | grep /bin/k3s || docker restart k3d-snowops-agent-0

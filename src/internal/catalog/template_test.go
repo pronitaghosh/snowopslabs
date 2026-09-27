@@ -14,7 +14,9 @@ func TestValidate(t *testing.T) {
 		wantErr string
 	}{
 		{name: "no template", in: "plain string"},
-		{name: "domain suffix", in: "http://x.{{.DomainSuffix}}/y"},
+		{name: "domain suffix hostname", in: "host: x.{{.DomainSuffix}}"},
+		{name: "ingress url suffix", in: "http://x.{{.IngressURLSuffix}}/y"},
+		{name: "url from domain suffix", in: "http://x.{{.DomainSuffix}}/y", wantErr: "IngressURLSuffix"},
 		{name: "monitoring ns", in: "{{.MonitoringNamespace}}"},
 		{name: "project root", in: "{{.ProjectRoot}}/bin"},
 		{name: "ingress class", in: "{{.IngressClass}}"},

@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"os"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -21,6 +20,7 @@ import (
 	"github.com/sagar2395/snowopslabs/internal/appdetail"
 	"github.com/sagar2395/snowopslabs/internal/config"
 	"github.com/sagar2395/snowopslabs/internal/k8s"
+	"github.com/sagar2395/snowopslabs/internal/labcheck"
 	"github.com/sagar2395/snowopslabs/internal/scenario"
 	"github.com/sagar2395/snowopslabs/pkg/checks"
 )
@@ -44,10 +44,13 @@ func pathName(w http.ResponseWriter, r *http.Request, kind string) (string, bool
 
 // StatusResponse represents the overall lab status.
 type StatusResponse struct {
-	DomainSuffix string             `json:"domainSuffix"`
-	Cluster      *k8s.ClusterInfo   `json:"cluster"`
-	Platform     PlatformStatusResp `json:"platform"`
-	Apps         []AppStatusResp    `json:"apps"`
+	DomainSuffix string `json:"domainSuffix"`
+	// IngressURLSuffix is DomainSuffix plus the ingress port when it is not
+	// 80; lab URLs are built from it, hostnames from DomainSuffix.
+	IngressURLSuffix string             `json:"ingressUrlSuffix"`
+	Cluster          *k8s.ClusterInfo   `json:"cluster"`
+	Platform         PlatformStatusResp `json:"platform"`
+	Apps             []AppStatusResp    `json:"apps"`
 }
 
 // PlatformStatusResp reports the provider and state of each core platform
@@ -90,12 +93,13 @@ type AppStatusResp struct {
 }
 
 // appURL returns the ingress URL for a deployed app, or "" when the app is not
-// deployed or no domain suffix is set.
-func appURL(name, domainSuffix string, deployed bool) string {
-	if !deployed || domainSuffix == "" {
+// deployed or no domain suffix is set. urlSuffix carries the ingress port when
+// it is not 80 (see config.IngressURLSuffix).
+func appURL(name, urlSuffix string, deployed bool) string {
+	if !deployed || urlSuffix == "" {
 		return ""
 	}
-	return fmt.Sprintf("http://%s.%s", name, domainSuffix)
+	return fmt.Sprintf("http://%s.%s", name, urlSuffix)
 }
 
 // appStatus returns one app's status: its declared contract plus what the
@@ -127,7 +131,7 @@ func (s *Server) appStatus(ctx context.Context, appName string) AppStatusResp {
 			resp.HPA = hpa
 		}
 	}
-	resp.URL = appURL(appName, s.cfg.DomainSuffix, resp.Deployed)
+	resp.URL = appURL(appName, s.cfg.IngressURLSuffix(), resp.Deployed)
 	return resp
 }
 
@@ -136,7 +140,8 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 
 	resp := StatusResponse{
-		DomainSuffix: s.cfg.DomainSuffix,
+		DomainSuffix:     s.cfg.DomainSuffix,
+		IngressURLSuffix: s.cfg.IngressURLSuffix(),
 	}
 
 	clusterInfo, _ := k8s.GetClusterInfo(ctx)
@@ -719,23 +724,7 @@ func (s *Server) handleScenarioVerify(w http.ResponseWriter, r *http.Request) {
 	defer release()
 
 	// Keep NewRunner's per-check timeout, the same default the CLI uses.
-	runner := checks.NewRunner()
-	promURL := os.Getenv("PROMETHEUS_URL")
-	if promURL == "" {
-		promURL = "http://prometheus." + s.cfg.DomainSuffix
-	}
-	runner.PrometheusURL = promURL
-	// The same check environment the CLI uses.
-	runner.Env = []string{
-		"DOMAIN_SUFFIX=" + s.cfg.DomainSuffix,
-		"MONITORING_NAMESPACE=" + s.cfg.MonitoringNamespace,
-		"PROJECT_ROOT=" + s.cfg.ProjectRoot,
-		"PROMETHEUS_URL=" + promURL,
-		"WORKLOAD_NAME=" + scenes.Workload.Name,
-		"WORKLOAD_NAMESPACE=" + scenes.Workload.Namespace,
-		"WORKLOAD_PORT=" + scenes.Workload.Port,
-		"WORKLOAD_METRIC=" + scenes.Workload.Metric,
-	}
+	runner := labcheck.NewRunner(s.cfg, scenes.Workload, "")
 
 	// Checks run one after another, each with its own timeout, so the total
 	// limit must allow for a long list, as in the CLI.
@@ -816,7 +805,8 @@ func (s *Server) handleDashboardURLs(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
 
-	domain := s.cfg.DomainSuffix
+	// URLs, not hostnames: keep a non-default ingress port.
+	domain := s.cfg.IngressURLSuffix()
 	monitoringNS := s.cfg.MonitoringNamespace
 	var dashboards []DashboardURL
 

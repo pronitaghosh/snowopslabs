@@ -36,12 +36,23 @@ var initCmd = &cobra.Command{
 			fmt.Sprintf("runtimes/%s/up.sh", cfg.Profile),
 			cfg.ClusterName,
 		); err != nil {
-			return fmt.Errorf("creating the cluster failed: %w", err)
+			return fmt.Errorf("bringing up the cluster failed: %w", err)
 		}
 
-		fmt.Println("\n=== Installing platform ===")
-		if err := platformUpRun(cmd, args); err != nil {
-			return err
+		ctx := cmdContext(cmd)
+		if namespaces, ok := baselineDeployed(ctx); ok {
+			// An existing lab (e.g. after a reboot): re-running every helm
+			// upgrade while pods are still restarting times out, and there is
+			// nothing to install. Wait for the platform to be Ready instead.
+			fmt.Println("\n=== Platform already installed — waiting for it to be ready ===")
+			if err := waitPodsReady(ctx, namespaces); err != nil {
+				return err
+			}
+		} else {
+			fmt.Println("\n=== Installing platform ===")
+			if err := platformUpRun(cmd, args); err != nil {
+				return err
+			}
 		}
 		if err := checkClusterHealthy(cmdContext(cmd)); err != nil {
 			return err
@@ -80,6 +91,59 @@ func preflightDocker(ctx context.Context, runner toolchain.Runner, profile, goos
 	return nil
 }
 
+// baselineDeployed reports whether the ingress, metrics and Grafana releases
+// are all deployed, and returns the namespaces they run in.
+func baselineDeployed(ctx context.Context) ([]string, bool) {
+	targets := [][2]string{{"monitoring", "grafana"}}
+	if cfg.IngressProvider != "" {
+		targets = append(targets, [2]string{"ingress", cfg.IngressProvider})
+	}
+	if cfg.MetricsProvider != "" {
+		targets = append(targets, [2]string{"monitoring/metrics", cfg.MetricsProvider})
+	}
+	seen := map[string]bool{}
+	var namespaces []string
+	for _, t := range targets {
+		p, err := reg.GetProvider(t[0], t[1])
+		if err != nil || !k8s.HelmReleaseDeployed(ctx, p.Namespace(), p.Name) {
+			return nil, false
+		}
+		if !seen[p.Namespace()] {
+			seen[p.Namespace()] = true
+			namespaces = append(namespaces, p.Namespace())
+		}
+	}
+	return namespaces, true
+}
+
+// waitPodsReady polls until every pod in namespaces is Ready. Pods are
+// replaced while a restarted cluster settles, so the list is re-read each time
+// rather than waited on once (`kubectl wait --all` fails when a pod it listed
+// is deleted). The limit is generous: a restart brings everything up at once.
+func waitPodsReady(ctx context.Context, namespaces []string) error {
+	deadline := time.Now().Add(6 * time.Minute)
+	for _, ns := range namespaces {
+		for {
+			ready, total, _ := k8s.NamespaceHealth(ctx, ns)
+			if total > 0 && ready == total {
+				break
+			}
+			if time.Now().After(deadline) {
+				return fmt.Errorf("only %d of %d platform pods in %q are Ready.\n"+
+					"See which with 'kubectl get pods -n %s'. Pending or OOMKilled pods mean Docker is short of memory ('labctl doctor')",
+					ready, total, ns, ns)
+			}
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(5 * time.Second):
+			}
+		}
+	}
+	fmt.Println("Platform pods are Ready.")
+	return nil
+}
+
 // checkClusterHealthy is init's last step: it only reports "Lab is up" once
 // the API answers and every node is Ready.
 func checkClusterHealthy(ctx context.Context) error {
@@ -107,20 +171,25 @@ func cmdContext(cmd *cobra.Command) context.Context {
 }
 
 func printPostInitHints() {
-	suffix := cfg.DomainSuffix
-	if suffix == "" {
-		suffix = "k3d.local"
+	// Re-read the config: the runtime may have fallen back to another port.
+	if fresh, err := config.Load(cfg.ProjectRoot); err == nil {
+		cfg.HTTPPort, cfg.HTTPSPort = fresh.HTTPPort, fresh.HTTPSPort
 	}
 	fmt.Println("\n=== Lab is up ===")
+	fmt.Printf("\n  Grafana:     %s   (admin / admin)\n", cfg.IngressURL("grafana"))
+	fmt.Printf("  Prometheus:  %s\n", cfg.IngressURL("prometheus"))
+	fmt.Println("  labctl UI:   run 'labctl ui', then open http://localhost:3939")
+	if cfg.HTTPPort != "" && cfg.HTTPPort != "80" {
+		fmt.Printf("\nPort 80 was busy, so the lab's ingress listens on %s; every URL and check uses it.\n", cfg.HTTPPort)
+	}
 	if !hostsBlockPresent() {
-		fmt.Printf("\nTo open ingress URLs like http://grafana.%s in your browser, add the\n", suffix)
-		fmt.Println("hostnames to /etc/hosts (one-time, needs sudo):")
-		fmt.Println("  labctl hosts add")
-		fmt.Println("(The labctl UI itself needs no hosts entry: http://localhost:3939)")
+		fmt.Println("\nTo open those URLs in your browser, add the lab hostnames to /etc/hosts")
+		fmt.Println("(one-time, needs sudo):  labctl hosts add")
 	}
 	fmt.Println("\nNext: deploy an app, then run a scenario:")
 	fmt.Println("  labctl app build go-api && labctl app deploy go-api")
 	fmt.Println("  labctl scenario up observability-sre   (add --deploy-prereqs to auto-deploy its apps)")
+	fmt.Println("\nAfter a reboot, 'labctl init' brings the lab back.")
 }
 
 var teardownCmd = &cobra.Command{

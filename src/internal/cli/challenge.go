@@ -13,6 +13,7 @@ import (
 
 	"github.com/sagar2395/snowopslabs/internal/challenge"
 	"github.com/sagar2395/snowopslabs/internal/executor"
+	"github.com/sagar2395/snowopslabs/internal/labcheck"
 	"github.com/sagar2395/snowopslabs/pkg/checks"
 	"github.com/spf13/cobra"
 )
@@ -263,8 +264,7 @@ func challengeSubmitCmd() *cobra.Command {
 				return err
 			}
 
-			runner := checks.NewRunner()
-			runner.ScriptDir = scriptDir
+			runner := labcheck.NewRunner(cfg, scenes.Workload, scriptDir)
 			results := runner.RunAll(cmd.Context(), gradingChecks)
 
 			passed := 0

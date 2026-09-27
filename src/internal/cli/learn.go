@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/sagar2395/snowopslabs/internal/labcheck"
 	"github.com/sagar2395/snowopslabs/internal/learn"
 	"github.com/sagar2395/snowopslabs/pkg/checks"
 	"github.com/spf13/cobra"
@@ -138,8 +139,7 @@ After completing the task, run this again to verify the check and advance.`,
 
 			fmt.Fprintf(out, "Verifying check %q...\n", m.Check.Name)
 			c := checksCheck(m.Check, p.Dir(), cfg.DomainSuffix)
-			runner := checks.NewRunner()
-			runner.ScriptDir = cfg.ProjectRoot
+			runner := labcheck.NewRunner(cfg, scenes.Workload, cfg.ProjectRoot)
 			res := runner.Run(cmd.Context(), c)
 			if res.Pass {
 				if err := eng.MarkCompleteModule(p, prog, idx, ""); err != nil {

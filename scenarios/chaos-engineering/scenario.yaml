@@ -73,7 +73,7 @@ checks:
 
   - name: workload-healthy
     type: http
-    url: "http://{{.WorkloadName}}.{{.DomainSuffix}}/health"
+    url: "http://{{.WorkloadName}}.{{.IngressURLSuffix}}/health"
     expectStatus: 200
     remediation: "The steady state is broken before the experiment starts. Check for a chaos experiment still running (kubectl get podchaos,networkchaos,stresschaos -A) and delete it, then wait for {{.WorkloadName}} to become ready."
 
@@ -84,7 +84,7 @@ checks:
     type: script
     script: checks/experiment-was-run.sh
     pending: true
-    remediation: "You have not run an experiment yet. Start load first, then inject one failure: labctl traffic start --app {{.WorkloadName}} --profile browse --rps 20 --duration 30m && bash scenarios/chaos-engineering/scripts/inject.sh pod-kill --app {{.WorkloadName}} --namespace {{.WorkloadNamespace}} — then watch the blast radius on http://grafana.{{.DomainSuffix}}/d/chaos-engineering"
+    remediation: "You have not run an experiment yet. Start load first, then inject one failure: labctl traffic start --app {{.WorkloadName}} --profile browse --rps 20 --duration 30m && bash scenarios/chaos-engineering/scripts/inject.sh pod-kill --app {{.WorkloadName}} --namespace {{.WorkloadNamespace}} — then watch the blast radius on http://grafana.{{.IngressURLSuffix}}/d/chaos-engineering"
 
   - name: workload-survives-pod-loss
     type: kubectl
@@ -130,9 +130,9 @@ references:
 explore:
   urls:
     - label: "Grafana — chaos dashboard (blast radius, PDB budget, restarts, latency)"
-      url: "http://grafana.{{.DomainSuffix}}/d/chaos-engineering"
+      url: "http://grafana.{{.IngressURLSuffix}}/d/chaos-engineering"
     - label: "Chaos Mesh Dashboard"
-      url: "http://chaos.{{.DomainSuffix}}"
+      url: "http://chaos.{{.IngressURLSuffix}}"
   commands:
     - label: "1. Establish the steady state — continuous load on {{.WorkloadName}}"
       command: "labctl traffic start --app {{.WorkloadName}} --profile browse --rps 20 --duration 30m"
@@ -153,7 +153,7 @@ explore:
     - label: "Try another failure mode (swap pod-kill for network-delay, cpu-stress, memory-stress or network-partition)"
       command: "bash {{.ProjectRoot}}/scenarios/chaos-engineering/scripts/inject.sh network-delay --app {{.WorkloadName}} --namespace {{.WorkloadNamespace}}   # or: cpu-stress, memory-stress, network-partition, pod-failure"
     - label: "Measure client-observed latency through the ingress — the only place a network fault shows"
-      command: "curl -s -o /dev/null -w 'connect=%{time_connect}s ttfb=%{time_starttransfer}s\\n' http://{{.WorkloadName}}.{{.DomainSuffix}}/health"
+      command: "curl -s -o /dev/null -w 'connect=%{time_connect}s ttfb=%{time_starttransfer}s\\n' http://{{.WorkloadName}}.{{.IngressURLSuffix}}/health"
     - label: "Clean up every experiment and stop the load"
       command: "bash {{.ProjectRoot}}/scenarios/chaos-engineering/scripts/cleanup-experiments.sh --app {{.WorkloadName}} --namespace {{.WorkloadNamespace}} && labctl traffic stop"
   tips:

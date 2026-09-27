@@ -136,9 +136,9 @@ snippets:
 explore:
   urls:
     - label: "Grafana — Secret Rotation (ESO sync calls, readiness, Vault API)"
-      url: "http://grafana.{{.DomainSuffix}}/d/secret-rotation"
+      url: "http://grafana.{{.IngressURLSuffix}}/d/secret-rotation"
     - label: "Vault UI (token auth — use your dev root token)"
-      url: "http://vault.{{.DomainSuffix}}"
+      url: "http://vault.{{.IngressURLSuffix}}"
   commands:
     - label: "1. Watch the file-mounted consumer read the secret from disk (leave this running)"
       command: "kubectl -n {{.WorkloadNamespace}} logs -l app=secret-consumer -f"

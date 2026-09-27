@@ -18,6 +18,7 @@ type TemplateContext = tmpl.Context
 func DefaultTemplateContext(projectRoot string) TemplateContext {
 	return TemplateContext{
 		DomainSuffix:        "k3d.local",
+		IngressURLSuffix:    "k3d.local",
 		MonitoringNamespace: "monitoring",
 		ProjectRoot:         projectRoot,
 		LokiRetentionPeriod: "72h",

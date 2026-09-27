@@ -26,7 +26,17 @@ Building the lab, checking the machine, and reading back what labctl did.
 - **Platform.** If Prometheus or Grafana fails to install, `init` exits
   non-zero and lists what failed. Installs are safe to repeat.
 - **Health.** `init` ends by checking the API server answers and every node is
-  Ready. Only then does it print "Lab is up".
+  Ready. Only then does it print "Lab is up", with the lab's real URLs.
+- **An existing lab is kept.** Re-running `init` — the way back after a reboot —
+  never deletes the cluster. It restarts it in order if it is unhealthy, skips
+  platform installs that are already deployed and waits for their pods to be
+  Ready. If the cluster still cannot be reached it stops and suggests
+  `labctl reset`, which rebuilds from scratch on purpose.
+- **Ports.** When host ports 80/443 are taken, the cluster's ingress falls back
+  to free ones (8080/8443 and up). The ports are recorded in
+  `~/.snowops/clusters/<name>.env`, and every URL labctl prints, the UI's links
+  and every check use them. Checks reach lab hostnames on `127.0.0.1` directly,
+  so grading does not need `/etc/hosts` entries and ignores `HTTP_PROXY`.
 
 ## Preparing a machine
 

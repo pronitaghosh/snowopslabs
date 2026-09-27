@@ -146,6 +146,9 @@ type Active struct {
 type Engine struct {
 	ProjectRoot  string
 	DomainSuffix string
+	// IngressURLSuffix is DomainSuffix plus a non-default ingress port; see
+	// config.IngressURLSuffix. Empty means DomainSuffix.
+	IngressURLSuffix string
 	// AlertmanagerURL is where Status queries fired alerts.
 	// Callers set it from ALERTMANAGER_URL or the ingress default.
 	AlertmanagerURL string
@@ -682,6 +685,15 @@ func (e *Engine) resolveTemplate(input string) string {
 
 // templateContext returns the template variables for the engine's current
 // binding. Faults can use the same variables as scenarios.
+// ingressURLSuffix is IngressURLSuffix, or the domain suffix when the caller
+// left it unset (port 80).
+func (e *Engine) ingressURLSuffix() string {
+	if e.IngressURLSuffix != "" {
+		return e.IngressURLSuffix
+	}
+	return e.DomainSuffix
+}
+
 func (e *Engine) templateContext() tmpl.Context {
 	return e.templateContextFor(e.Workload)
 }
@@ -691,6 +703,7 @@ func (e *Engine) templateContextFor(bound workload.Workload) tmpl.Context {
 	w := bound.WithDefaults()
 	return tmpl.Context{
 		DomainSuffix:        e.DomainSuffix,
+		IngressURLSuffix:    e.ingressURLSuffix(),
 		MonitoringNamespace: e.MonitoringNamespace,
 		ProjectRoot:         e.ProjectRoot,
 		IngressClass:        "traefik",

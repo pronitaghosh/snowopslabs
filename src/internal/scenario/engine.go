@@ -64,8 +64,11 @@ type (
 
 // Engine discovers, loads, and manages scenarios.
 type Engine struct {
-	ProjectRoot         string
-	DomainSuffix        string
+	ProjectRoot  string
+	DomainSuffix string
+	// IngressURLSuffix is DomainSuffix plus a non-default ingress port; see
+	// config.IngressURLSuffix. Empty means DomainSuffix.
+	IngressURLSuffix    string
 	Profile             string // active runtime profile (k3d|kind|incluster), used for preflight
 	MonitoringNamespace string // namespace for monitoring/logging/tracing (default: "monitoring")
 	IngressClass        string // ingress class for scenario Ingress manifests (default: "traefik")
@@ -1139,6 +1142,15 @@ func (e *Engine) resolveTemplateWith(input string, extra map[string]string) stri
 	return tmpl.Expand(input, e.templateContext(), overlay)
 }
 
+// ingressURLSuffix is IngressURLSuffix, or the domain suffix when the caller
+// left it unset (port 80).
+func (e *Engine) ingressURLSuffix() string {
+	if e.IngressURLSuffix != "" {
+		return e.IngressURLSuffix
+	}
+	return e.DomainSuffix
+}
+
 // templateContext returns the template variables for the engine's current
 // binding.
 func (e *Engine) templateContext() tmpl.Context {
@@ -1151,6 +1163,7 @@ func (e *Engine) templateContextFor(bound workload.Workload) tmpl.Context {
 	w := bound.WithDefaults()
 	return tmpl.Context{
 		DomainSuffix:        e.DomainSuffix,
+		IngressURLSuffix:    e.ingressURLSuffix(),
 		MonitoringNamespace: e.MonitoringNamespace,
 		ProjectRoot:         e.ProjectRoot,
 		LokiRetentionPeriod: lokiRetentionPeriod(),

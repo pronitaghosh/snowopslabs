@@ -108,9 +108,9 @@ snippets:
 explore:
   urls:
     - label: "Grafana — the roll itself: node versions, pod spread, PDB and success rate"
-      url: "http://grafana.{{.DomainSuffix}}/d/cluster-upgrade-drill"
+      url: "http://grafana.{{.IngressURLSuffix}}/d/cluster-upgrade-drill"
     - label: "Grafana — {{.WorkloadName}} request metrics in detail"
-      url: "http://grafana.{{.DomainSuffix}}/d/app-requests?var-app={{.WorkloadName}}"
+      url: "http://grafana.{{.IngressURLSuffix}}/d/app-requests?var-app={{.WorkloadName}}"
   commands:
     - label: "1. Start steady background traffic (leave it running)"
       command: "labctl traffic start --app {{.WorkloadName}} --profile steady --rps 20"

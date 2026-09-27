@@ -71,7 +71,7 @@ EOF
 
 echo ""
 echo "Vault installed successfully (dev mode)."
-echo "    UI:   http://vault.${DOMAIN_SUFFIX}  (token auth — use your dev root token)"
+echo "    UI:   http://vault.${INGRESS_URL_SUFFIX:-${DOMAIN_SUFFIX:-k3d.local}}  (token auth — use your dev root token)"
 echo "    Addr (in-cluster): http://vault.${NAMESPACE}.svc:8200"
 echo "    Demo secret: secret/${WORKLOAD_NAME:-go-api} (key: api-key)"
 echo "    Next: install external-secrets to sync it into the go-api namespace."

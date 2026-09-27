@@ -143,8 +143,8 @@ case "${COMMAND}" in
 
     echo ""
     echo "✓ Deployment complete! Access the application:"
-    echo "  - HTTP: http://${APP_NAME}.${DOMAIN_SUFFIX:-k3d.local}"
-    echo "  - Metrics: http://${APP_NAME}.${DOMAIN_SUFFIX:-k3d.local}/metrics"
+    echo "  - HTTP: http://${APP_NAME}.${INGRESS_URL_SUFFIX:-${DOMAIN_SUFFIX:-k3d.local}}"
+    echo "  - Metrics: http://${APP_NAME}.${INGRESS_URL_SUFFIX:-${DOMAIN_SUFFIX:-k3d.local}}/metrics"
     echo ""
     echo "View deployment status:"
     echo "  kubectl get deployments -n ${NAMESPACE}"

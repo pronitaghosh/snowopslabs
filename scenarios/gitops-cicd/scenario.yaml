@@ -167,9 +167,9 @@ snippets:
 explore:
   urls:
     - label: "ArgoCD Dashboard"
-      url: "http://argocd.{{.DomainSuffix}}"
+      url: "http://argocd.{{.IngressURLSuffix}}"
     - label: "Grafana — GitOps Delivery (sync and health over time)"
-      url: "http://grafana.{{.DomainSuffix}}/d/gitops-delivery"
+      url: "http://grafana.{{.IngressURLSuffix}}/d/gitops-delivery"
   commands:
     - label: "Get the ArgoCD admin password"
       command: "kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d; echo"

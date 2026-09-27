@@ -42,7 +42,7 @@ kubectl rollout status deployment/chaos-dashboard -n $NAMESPACE --timeout=120s |
 
 # Expose the dashboard through Traefik at a stable URL.
 DOMAIN_SUFFIX="${DOMAIN_SUFFIX:-k3d.local}"
-echo "Exposing Chaos Mesh dashboard at http://chaos.${DOMAIN_SUFFIX} ..."
+echo "Exposing Chaos Mesh dashboard at http://chaos.${INGRESS_URL_SUFFIX:-${DOMAIN_SUFFIX:-k3d.local}} ..."
 kubectl apply -f - <<EOF
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -69,7 +69,7 @@ echo "Chaos Mesh installed successfully"
 echo "Namespace: $NAMESPACE"
 echo "Status: kubectl get pods -n $NAMESPACE"
 echo ""
-echo "Dashboard: http://chaos.${DOMAIN_SUFFIX}  (run 'labctl hosts sync' once if the host doesn't resolve)"
+echo "Dashboard: http://chaos.${INGRESS_URL_SUFFIX:-${DOMAIN_SUFFIX:-k3d.local}}  (run 'labctl hosts sync' once if the host doesn't resolve)"
 echo "  Or port-forward: kubectl port-forward -n $NAMESPACE svc/chaos-dashboard 2333:2333  → http://localhost:2333"
 echo ""
 echo "Create experiments via CRDs or the Chaos Dashboard UI."

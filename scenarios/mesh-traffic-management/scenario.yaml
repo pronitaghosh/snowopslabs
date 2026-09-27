@@ -130,7 +130,7 @@ snippets:
 explore:
   urls:
     - label: "Grafana — mesh traffic: split, latency and mTLS coverage"
-      url: "http://grafana.{{.DomainSuffix}}/d/mesh-traffic"
+      url: "http://grafana.{{.IngressURLSuffix}}/d/mesh-traffic"
   commands:
     - label: "Apply the weighted split (do this first — nothing else stages it)"
       command: "labctl scenario render mesh-traffic-management manifests/virtualservice.yaml --app {{.WorkloadName}} | kubectl apply -f -"

@@ -10,6 +10,7 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/sagar2395/snowopslabs/internal/labcheck"
 	resultspkg "github.com/sagar2395/snowopslabs/internal/results"
 	"github.com/sagar2395/snowopslabs/internal/scaffold"
 	scenariopkg "github.com/sagar2395/snowopslabs/internal/scenario"
@@ -300,29 +301,11 @@ func checkOutcomes(results []checks.Result) []resultspkg.CheckOutcome {
 	return out
 }
 
-// newCheckRunner builds a check runner for the lab: Prometheus at
-// PROMETHEUS_URL or the ingress hostname, and the standard script
-// environment.
+// newCheckRunner is the lab's check runner (see labcheck) with the verify
+// per-check timeout.
 func newCheckRunner() *checks.Runner {
-	r := checks.NewRunner()
+	r := labcheck.NewRunner(cfg, scenes.Workload, "")
 	r.DefaultTimeout = verifyCheckTimeout
-	promURL := os.Getenv("PROMETHEUS_URL")
-	if promURL == "" {
-		promURL = "http://prometheus." + cfg.DomainSuffix
-	}
-	r.PrometheusURL = promURL
-	// Check scripts need the bound app, as component scripts do (ADR-0014).
-	r.Env = []string{
-		"DOMAIN_SUFFIX=" + cfg.DomainSuffix,
-		"MONITORING_NAMESPACE=" + cfg.MonitoringNamespace,
-		"PROJECT_ROOT=" + cfg.ProjectRoot,
-		// The same Prometheus the promql checks use.
-		"PROMETHEUS_URL=" + promURL,
-		"WORKLOAD_NAME=" + scenes.Workload.Name,
-		"WORKLOAD_NAMESPACE=" + scenes.Workload.Namespace,
-		"WORKLOAD_PORT=" + scenes.Workload.Port,
-		"WORKLOAD_METRIC=" + scenes.Workload.Metric,
-	}
 	return r
 }
 

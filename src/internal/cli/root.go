@@ -17,6 +17,7 @@ import (
 	"github.com/sagar2395/snowopslabs/internal/config"
 	"github.com/sagar2395/snowopslabs/internal/executor"
 	"github.com/sagar2395/snowopslabs/internal/incident"
+	"github.com/sagar2395/snowopslabs/internal/labcheck"
 	"github.com/sagar2395/snowopslabs/internal/platform"
 	"github.com/sagar2395/snowopslabs/internal/runtime"
 	"github.com/sagar2395/snowopslabs/internal/scenario"
@@ -81,6 +82,8 @@ var rootCmd = &cobra.Command{
 		// their defaults) even without .env or runtime.env.
 		scriptExec.SetEnv("CLUSTER_NAME", cfg.ClusterName)
 		scriptExec.SetEnv("DOMAIN_SUFFIX", cfg.DomainSuffix)
+		// Scripts build lab URLs from this so a fallback ingress port is kept.
+		scriptExec.SetEnv("INGRESS_URL_SUFFIX", cfg.IngressURLSuffix())
 		scriptExec.SetEnv("HTTP_PORT", cfg.HTTPPort)
 		scriptExec.SetEnv("HTTPS_PORT", cfg.HTTPSPort)
 		scriptExec.SetEnv("LAB_CPUS", cfg.LabCPUs)
@@ -152,16 +155,15 @@ func bindWorkload(appName string, explicit bool) error {
 	scenes = scenario.NewEngine(cfg.ProjectRoot, cfg.DomainSuffix, cfg.Profile)
 	scenes.MonitoringNamespace = cfg.MonitoringNamespace
 	scenes.IngressClass = cfg.IngressClass
+	scenes.IngressURLSuffix = cfg.IngressURLSuffix()
 	scenes.Workload = bound
 	scenes.Contract = boundContract
 
 	incEng = incident.NewEngine(cfg.ProjectRoot, cfg.DomainSuffix)
+	incEng.IngressURLSuffix = cfg.IngressURLSuffix()
 	incEng.MonitoringNamespace = cfg.MonitoringNamespace
 	incEng.Workload = bound
-	incEng.AlertmanagerURL = os.Getenv("ALERTMANAGER_URL")
-	if incEng.AlertmanagerURL == "" {
-		incEng.AlertmanagerURL = "http://alertmanager." + cfg.DomainSuffix
-	}
+	incEng.AlertmanagerURL = labcheck.AlertmanagerURL(cfg)
 	return nil
 }
 

@@ -125,7 +125,7 @@ snippets:
 explore:
   urls:
     - label: "Grafana — objects come back, data does not"
-      url: "http://grafana.{{.DomainSuffix}}/d/backup-restore"
+      url: "http://grafana.{{.IngressURLSuffix}}/d/backup-restore"
   commands:
     # Real kubectl and jq throughout — the drill teaches the tools, not labctl.
     # labctl only stages the marker and the writer, and grades the result.

@@ -25,5 +25,5 @@ kubectl get ingress -n $NAMESPACE
 
 echo ""
 echo "Prometheus metrics endpoint:"
-echo "  - External: http://prometheus.${DOMAIN_SUFFIX:-k3d.local}"
+echo "  - External: http://prometheus.${INGRESS_URL_SUFFIX:-${DOMAIN_SUFFIX:-k3d.local}}"
 echo "  - Internal: http://prometheus-kube-prometheus-prometheus.$NAMESPACE.svc.cluster.local:9090"

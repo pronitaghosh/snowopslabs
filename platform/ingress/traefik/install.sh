@@ -61,4 +61,4 @@ spec:
 EOF
 
 echo "Traefik installed successfully."
-echo "    Dashboard: http://traefik.${DOMAIN_SUFFIX}/dashboard/"
+echo "    Dashboard: http://traefik.${INGRESS_URL_SUFFIX:-${DOMAIN_SUFFIX:-k3d.local}}/dashboard/"

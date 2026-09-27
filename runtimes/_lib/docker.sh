@@ -149,3 +149,30 @@ prepull_images() {
     fi
   done
 }
+
+# cluster_record_file <cluster> — where labctl reads what the runtime bound
+# (internal/config.ClusterStateFile).
+cluster_record_file() {
+  printf '%s/clusters/%s.env' "${SNOWOPS_HOME:-$HOME/.snowops}" "$1"
+}
+
+# record_ingress_ports <cluster> <container> — write the host ports mapped to
+# the container's :80 and :443. When 80/443 were busy the runtime fell back to
+# other ports, and every URL and check labctl builds must follow them.
+record_ingress_ports() {
+  local cluster="$1" container="$2" http https file
+  http="$(docker port "$container" 80/tcp 2>/dev/null | head -n 1 | sed 's/.*://')"
+  https="$(docker port "$container" 443/tcp 2>/dev/null | head -n 1 | sed 's/.*://')"
+  case "$http" in
+    '' | *[!0-9]*) return 0 ;;
+  esac
+  file="$(cluster_record_file "$cluster")"
+  mkdir -p "$(dirname "$file")"
+  printf 'HTTP_PORT=%s\nHTTPS_PORT=%s\n' "$http" "${https:-443}" >"$file"
+}
+
+# forget_cluster <cluster> — drop the record when the cluster is deleted, so a
+# new cluster starts from the configured ports again.
+forget_cluster() {
+  rm -f "$(cluster_record_file "$1")"
+}

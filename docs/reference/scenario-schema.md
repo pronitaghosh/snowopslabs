@@ -37,7 +37,7 @@ checks: [...]                         # machine-verifiable assertions
 explore:
   urls:
     - label: "My Dashboard"
-      url: "http://my-app.{{.DomainSuffix}}"
+      url: "http://my-app.{{.IngressURLSuffix}}"
   commands:
     - label: "Check status"
       command: "kubectl get pods -n my-ns"
@@ -179,7 +179,7 @@ checks:
 
   - name: grafana-reachable
     type: http
-    url: "http://grafana.{{.DomainSuffix}}"
+    url: "http://grafana.{{.IngressURLSuffix}}"
     expectStatus: 200                 # default 200
     bodyContains: "Grafana"           # optional
 
@@ -313,7 +313,8 @@ URLs, commands, namespaces, snippets and manifests are Go templates.
 
 | Variable | Example | Meaning |
 |---|---|---|
-| `{{.DomainSuffix}}` | `k3d.local` | Ingress domain suffix from the active runtime |
+| `{{.DomainSuffix}}` | `k3d.local` | Ingress domain suffix from the active runtime. Use it for **hostnames** (an Ingress `host:`), never in a URL. |
+| `{{.IngressURLSuffix}}` | `k3d.local` or `k3d.local:8080` | The domain suffix plus the ingress port when it is not 80 (the runtime falls back when 80 is busy). Build every **URL** from it: `http://grafana.{{.IngressURLSuffix}}`. `labctl validate` rejects a URL built from `{{.DomainSuffix}}`. |
 | `{{.MonitoringNamespace}}` | `monitoring` | Where the monitoring stack lives |
 | `{{.ProjectRoot}}` | `/path/to/project` | Absolute path to the content root |
 | `{{.LokiRetentionPeriod}}` | `72h` | Loki's configured retention |

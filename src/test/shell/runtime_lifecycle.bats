@@ -17,6 +17,23 @@ teardown() {
   stub_teardown
 }
 
+# docker_recovers_after_restart makes `docker top` show k3s only once a node
+# has been restarted, the way a real node recovers.
+docker_recovers_after_restart() {
+  mv "$STUB_BIN/docker" "$STUB_BIN/docker.rec"
+  {
+    echo '#!/usr/bin/env bash'
+    echo "out=\"\$(\"$STUB_BIN/docker.rec\" \"\$@\")\"; code=\$?"
+    echo 'case "$1" in'
+    echo "  restart) touch \"$STUB_DIR/restarted\" ;;"
+    echo "  top) [ -f \"$STUB_DIR/restarted\" ] && out=\"root 1 /bin/k3s agent\" ;;"
+    echo 'esac'
+    echo '[ -n "$out" ] && printf "%s\n" "$out"'
+    echo 'exit $code'
+  } >"$STUB_BIN/docker"
+  chmod +x "$STUB_BIN/docker"
+}
+
 # --- k3d --------------------------------------------------------------------
 
 @test "k3d up skips creation when the cluster already exists" {
@@ -34,15 +51,20 @@ teardown() {
   assert_called k3d "cluster create"
 }
 
-@test "k3d up recreates the cluster when it exists but is unreachable" {
-  # The cluster is listed (present) but its API never answers — the state a
-  # half-built cluster leaves behind (broken load-balancer, stale kubeconfig).
-  # `make init` must recover, not abort: delete the husk and recreate it.
+@test "k3d up never deletes an existing cluster whose API does not answer" {
+  # After a Docker/colima restart the API takes a minute or more to answer.
+  # Recreating on a timeout once wiped a healthy lab's apps and scenarios, so
+  # up.sh restarts the cluster in order, then stops and leaves rebuilding to
+  # the user.
   stub_when kubectl "get --raw" 1 # /healthz probe fails
-  run bash "$ROOT/runtimes/k3d/up.sh" testcluster
-  [ "$status" -eq 0 ]
-  assert_called k3d "cluster delete"
-  assert_called k3d "cluster create"
+  REACHABLE_WAIT=0 run bash "$ROOT/runtimes/k3d/up.sh" testcluster
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"labctl reset"* ]]
+  # It tries the ordered restart k3d provides (servers, then agents) first.
+  assert_called k3d "cluster stop testcluster"
+  assert_called k3d "cluster start testcluster"
+  refute_called k3d "cluster delete"
+  refute_called k3d "cluster create"
 }
 
 @test "k3d up skips creation when an existing cluster is healthy" {
@@ -60,13 +82,50 @@ teardown() {
   # it, not leave it or delete the cluster.
   stub_when docker "label=k3d.cluster" 0 "k3d-testcluster-agent-0"
   stub_when docker "k3d.role" 0 "agent"
-  # `docker top` prints nothing: no k3s process inside the running container.
-  run bash "$ROOT/runtimes/k3d/up.sh" testcluster
+  # `docker top` prints nothing until the node is restarted.
+  docker_recovers_after_restart
+  NODE_CHECK_INTERVAL=0 run bash "$ROOT/runtimes/k3d/up.sh" testcluster
   [ "$status" -eq 0 ]
   assert_called docker "restart k3d-testcluster-agent-0"
   assert_called kubectl "wait --for=condition=Ready node"
   refute_called k3d "cluster delete"
   refute_called k3d "cluster create"
+}
+
+@test "k3d up restarts a node that stays NotReady, and fails loudly if it never recovers" {
+  # k3s can die a minute after a VM restart, after restart_dead_nodes looked.
+  stub_when kubectl "wait --for=condition=Ready node" 1
+  stub_when kubectl "get nodes --no-headers" 0 "k3d-testcluster-agent-0   NotReady   <none>   1h   v1.33.6"
+  NODE_READY_WAIT=0 NODE_CHECK_INTERVAL=0 run bash "$ROOT/runtimes/k3d/up.sh" testcluster
+  [ "$status" -eq 1 ]
+  assert_called docker "restart k3d-testcluster-agent-0"
+  [[ "$output" == *"stay NotReady: k3d-testcluster-agent-0"* ]]
+  refute_called k3d "cluster delete"
+}
+
+@test "k3d up restarts a node whose k3s dies late, and succeeds once it stays up" {
+  stub_when docker "label=k3d.cluster" 0 "k3d-testcluster-agent-0"
+  stub_when docker "k3d.role" 0 "agent"
+  docker_recovers_after_restart
+  NODE_STABLE_CHECKS=2 NODE_CHECK_INTERVAL=0 run bash "$ROOT/runtimes/k3d/up.sh" testcluster
+  [ "$status" -eq 0 ]
+  assert_call_count docker 1 "restart k3d-testcluster-agent-0"
+  refute_called k3d "cluster delete"
+}
+
+@test "k3d up re-registers a node whose container moved to another IP" {
+  # The Node records the address the container had before the restart; k3s
+  # reads that one and shuts down on every restart until the Node is replaced.
+  stub_when docker "label=k3d.cluster" 0 "k3d-testcluster-agent-0"
+  stub_when docker "k3d.role" 0 "agent"
+  stub_when docker "range .NetworkSettings.Networks" 0 "172.18.0.5"
+  stub_when kubectl "InternalIP" 0 "172.18.0.2"
+  docker_recovers_after_restart
+  NODE_CHECK_INTERVAL=0 NODE_STABLE_CHECKS=1 run bash "$ROOT/runtimes/k3d/up.sh" testcluster
+  [ "$status" -eq 0 ]
+  assert_called kubectl "delete node k3d-testcluster-agent-0"
+  assert_called docker "restart k3d-testcluster-agent-0"
+  refute_called k3d "cluster delete"
 }
 
 @test "k3d up leaves a node alone when k3s is running inside it" {
@@ -94,13 +153,14 @@ teardown() {
   refute_called kind "create cluster"
 }
 
-@test "kind up recreates the cluster when it exists but is unreachable" {
+@test "kind up never deletes an existing cluster whose API does not answer" {
   stub_stdout kind "testcluster" # `get clusters` lists it
   stub_when kubectl "get --raw" 1 # /healthz probe fails
-  run bash "$ROOT/runtimes/kind/up.sh" testcluster
-  [ "$status" -eq 0 ]
-  assert_called kind "delete cluster"
-  assert_called kind "create cluster"
+  REACHABLE_WAIT=0 run bash "$ROOT/runtimes/kind/up.sh" testcluster
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"labctl reset"* ]]
+  refute_called kind "delete cluster"
+  refute_called kind "create cluster"
 }
 
 @test "kind down is a clean no-op when the cluster is absent" {

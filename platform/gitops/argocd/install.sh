@@ -33,7 +33,7 @@ kubectl rollout status deployment/argocd-server -n $NAMESPACE --timeout=120s || 
 
 echo "ArgoCD installed successfully"
 echo ""
-echo "Access ArgoCD at: http://argocd.${DOMAIN_SUFFIX:-k3d.local}"
+echo "Access ArgoCD at: http://argocd.${INGRESS_URL_SUFFIX:-${DOMAIN_SUFFIX:-k3d.local}}"
 echo "Retrieve initial admin password: kubectl -n $NAMESPACE get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d"
 echo "Namespace: $NAMESPACE"
 echo "Status: kubectl get pods -n $NAMESPACE"

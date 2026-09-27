@@ -88,6 +88,6 @@ EOF
 
 echo "Prometheus Stack installed successfully"
 echo ""
-echo "Access Prometheus at:   http://prometheus.${DOMAIN_SUFFIX} (via Traefik ingress)"
-echo "Access Alertmanager at: http://alertmanager.${DOMAIN_SUFFIX} (via Traefik ingress)"
+echo "Access Prometheus at:   http://prometheus.${INGRESS_URL_SUFFIX:-${DOMAIN_SUFFIX:-k3d.local}} (via Traefik ingress)"
+echo "Access Alertmanager at: http://alertmanager.${INGRESS_URL_SUFFIX:-${DOMAIN_SUFFIX:-k3d.local}} (via Traefik ingress)"
 echo "Namespace: $NAMESPACE"

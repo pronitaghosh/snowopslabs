@@ -183,11 +183,11 @@ references:
 explore:
   urls:
     - label: "Grafana — Kafka consumer-lag dashboard (start here: lag, produce vs consume rate)"
-      url: "http://grafana.{{.DomainSuffix}}/d/event-driven-arch"
+      url: "http://grafana.{{.IngressURLSuffix}}/d/event-driven-arch"
     - label: "Grafana — Kafka Overview (cluster health, throughput, per-topic rates)"
-      url: "http://grafana.{{.DomainSuffix}}/d/kafka-overview"
+      url: "http://grafana.{{.IngressURLSuffix}}/d/kafka-overview"
     - label: "Prometheus — are the Kafka targets being scraped?"
-      url: "http://prometheus.{{.DomainSuffix}}/targets"
+      url: "http://prometheus.{{.IngressURLSuffix}}/targets"
   commands:
     - label: "Diagnose first: per-partition lag for the group"
       command: "kubectl -n kafka exec lab-kafka-dual-role-0 -- bin/kafka-consumer-groups.sh --bootstrap-server localhost:9092 --describe --group order-processors"

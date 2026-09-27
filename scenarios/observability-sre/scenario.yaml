@@ -151,7 +151,7 @@ checks:
 
   - name: grafana-reachable
     type: http
-    url: "http://grafana.{{.DomainSuffix}}"
+    url: "http://grafana.{{.IngressURLSuffix}}"
     expectStatus: 200
     remediation: "Grafana is a platform prerequisite. Bring it up and confirm the host resolves: labctl platform up monitoring/grafana"
 
@@ -243,9 +243,9 @@ references:
 explore:
   urls:
     - label: "Grafana — SRE Golden Signals dashboard"
-      url: "http://grafana.{{.DomainSuffix}}/d/observability-sre"
+      url: "http://grafana.{{.IngressURLSuffix}}/d/observability-sre"
     - label: "Prometheus"
-      url: "http://prometheus.{{.DomainSuffix}}"
+      url: "http://prometheus.{{.IngressURLSuffix}}"
   commands:
     - label: "1. Wire the app to the collector (do this first — nothing stages it)"
       command: "bash scenarios/observability-sre/scripts/enable-tracing.sh --app {{.WorkloadName}} --namespace {{.WorkloadNamespace}}"
@@ -258,7 +258,7 @@ explore:
     - label: "4. Confirm the app is counting them (server-side truth)"
       command: "kubectl -n {{.WorkloadNamespace}} exec deploy/{{.WorkloadName}} -- wget -qO- localhost:{{.WorkloadPort}}/metrics | grep '^{{.WorkloadMetric}}_count'"
     - label: "5. Compare client-side vs server-side in Grafana"
-      command: "open 'http://grafana.{{.DomainSuffix}}/d/app-requests?var-app={{.WorkloadName}}'  # k6 sent vs app handled — the two lines should overlap"
+      command: "open 'http://grafana.{{.IngressURLSuffix}}/d/app-requests?var-app={{.WorkloadName}}'  # k6 sent vs app handled — the two lines should overlap"
     - label: "6. Query {{.WorkloadName}} logs in Loki"
       command: "Open Grafana > Explore > Loki > {namespace=\"{{.WorkloadNamespace}}\"} | json | line_format \"{{.method}} {{.path}} {{.status}}\""
     - label: "7. Jump from a log line to its trace"

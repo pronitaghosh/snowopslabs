@@ -66,16 +66,32 @@ pick_port() {
 # whole run under `set -e`. Heal the kubeconfig, skip creation only when the API
 # is reachable, and recreate a broken cluster rather than failing every later
 # step (mirrors runtimes/k3d/up.sh).
+REACHABLE_WAIT="${REACHABLE_WAIT:-180}"
+kind_reachable() {
+  kubectl config use-context "kind-$CLUSTER_NAME" >/dev/null 2>&1 &&
+    kubectl --request-timeout=20s get --raw=/healthz >/dev/null 2>&1
+}
 if kind get clusters 2>/dev/null | grep -qx "$CLUSTER_NAME"; then
-  echo "Cluster '$CLUSTER_NAME' already exists — verifying it is reachable."
+  echo "Cluster '$CLUSTER_NAME' already exists — checking it is healthy."
   kind export kubeconfig --name "$CLUSTER_NAME" >/dev/null 2>&1 || true
-  if kubectl config use-context "kind-$CLUSTER_NAME" >/dev/null 2>&1 &&
-    kubectl --request-timeout=20s get --raw=/healthz >/dev/null 2>&1; then
-    echo "Cluster '$CLUSTER_NAME' is healthy; skipping creation."
-    exit 0
-  fi
-  echo "Cluster '$CLUSTER_NAME' exists but its API is not reachable — recreating it."
-  kind delete cluster --name "$CLUSTER_NAME" >/dev/null 2>&1 || true
+  # A stopped Docker VM stops the node containers; start them again.
+  for node in $(docker ps -a --filter "label=io.x-k8s.kind.cluster=${CLUSTER_NAME}" --format '{{.Names}}' 2>/dev/null); do
+    docker start "$node" >/dev/null 2>&1 || true
+  done
+  waited=0
+  until kind_reachable; do
+    if [ "$waited" -ge "$REACHABLE_WAIT" ]; then
+      # Never delete an existing cluster on our own: it holds the user's lab.
+      echo "ERROR: cluster '$CLUSTER_NAME' exists but its API server is not answering." >&2
+      echo "  To rebuild the lab from scratch (this loses its apps and scenarios): labctl reset" >&2
+      exit 1
+    fi
+    sleep 5
+    waited=$((waited + 5))
+  done
+  echo "Cluster '$CLUSTER_NAME' is healthy; skipping creation."
+  record_ingress_ports "$CLUSTER_NAME" "${CLUSTER_NAME}-control-plane"
+  exit 0
 fi
 
 # Fall back to free host ports when the defaults are already bound (e.g. another
@@ -132,6 +148,7 @@ echo "Creating kind cluster '$CLUSTER_NAME' (control-plane + ${AGENTS} worker(s)
 kind create cluster --name "$CLUSTER_NAME" --config "$config_file" --wait 120s
 
 kubectl config use-context "kind-$CLUSTER_NAME"
+record_ingress_ports "$CLUSTER_NAME" "${CLUSTER_NAME}-control-plane"
 
 echo ""
 echo "kind cluster '$CLUSTER_NAME' is ready."

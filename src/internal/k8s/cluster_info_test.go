@@ -73,3 +73,17 @@ esac`,
 		})
 	}
 }
+
+func TestHelmReleaseDeployed(t *testing.T) {
+	// Only a secret labelled status=deployed counts; a failed install leaves
+	// status=failed, which must not make init skip the install.
+	stubKubectl(t, `case "$*" in
+  *"name=grafana,status=deployed"*) echo "sh.helm.release.v1.grafana.v1 helm.sh/release.v1 1 5m" ;;
+esac`)
+	if !HelmReleaseDeployed(context.Background(), "monitoring", "grafana") {
+		t.Error("a deployed release should count")
+	}
+	if HelmReleaseDeployed(context.Background(), "monitoring", "prometheus") {
+		t.Error("a release with no deployed revision must not count")
+	}
+}

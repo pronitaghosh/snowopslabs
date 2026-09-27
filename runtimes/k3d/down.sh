@@ -9,6 +9,11 @@ NC='\033[0m' # No Color
 
 CLUSTER_NAME="${1:-${CLUSTER_NAME:-snowops}}"
 
+# shellcheck source=../_lib/docker.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/_lib/docker.sh"
+# The cluster's recorded ports go with it, whether or not it still exists.
+forget_cluster "$CLUSTER_NAME"
+
 echo -e "${YELLOW}Shutting down k3d cluster '${CLUSTER_NAME}'...${NC}"
 
 if ! k3d cluster list "$CLUSTER_NAME" &>/dev/null; then

@@ -9,7 +9,7 @@
 # exactly the moment the learner re-runs verify after right-sizing.
 
 DOMAIN_SUFFIX="${DOMAIN_SUFFIX:-k3d.local}"
-PROMETHEUS_URL="${PROMETHEUS_URL:-http://prometheus.${DOMAIN_SUFFIX}}"
+PROMETHEUS_URL="${PROMETHEUS_URL:-http://prometheus.${INGRESS_URL_SUFFIX:-${DOMAIN_SUFFIX:-k3d.local}}}"
 USAGE_WINDOW="${USAGE_WINDOW:-15m}"
 
 # prom_scalar <query> — prints the first sample's value, or nothing.

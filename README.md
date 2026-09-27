@@ -254,6 +254,7 @@ labctl teardown                       # remove everything (never hangs)
 | Symptom | Fix |
 |---|---|
 | Browser can't reach `*.k3d.local` URLs (`no such host`) | Ingress routes by hostname, which needs a local DNS entry. Run `labctl hosts add` once (sudo). The labctl UI at `http://localhost:3939` never needs this. No sudo? Set `DOMAIN_SUFFIX=127.0.0.1.nip.io` in `.env` (a wildcard DNS that resolves to localhost, needs internet) and re-run `labctl platform up`. |
+| URLs end in `:8080` | Something else (another cluster, a local web server) already held port 80, so the lab's ingress moved to 8080. Every URL labctl prints and every check follow it; nothing to fix. To get 80 back, free it and run `labctl reset`. |
 | `required app(s) not deployed` when starting a scenario/challenge | The scenario needs an app that isn't running. Deploy it (`labctl app build <name> && labctl app deploy <name>`) or re-run with `--deploy-prereqs` to do it automatically. |
 | Something is wedged and you want a clean slate | `labctl reset` (teardown + init) rebuilds the lab; `labctl scenario down <name>` / `labctl incident resolve` undo a single activation. |
 | `TLS handshake timeout` / OOM-killed pods | Docker is short of memory. `labctl doctor` shows its size and the exact resize command for your setup; resize, then re-run `labctl init`. |

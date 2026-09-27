@@ -16,7 +16,7 @@ look at.
 ## Diagnosis path
 
 ```bash
-curl -s -o /dev/null -w '%{http_code}\n' http://{{.WorkloadName}}.{{.DomainSuffix}}/health   # 503
+curl -s -o /dev/null -w '%{http_code}\n' http://{{.WorkloadName}}.{{.IngressURLSuffix}}/health   # 503
 kubectl get pods -n {{.WorkloadNamespace}}                       # Running, Ready — fine
 kubectl get endpoints {{.WorkloadName}} -n {{.WorkloadNamespace}}           # ENDPOINTS: <none>  ← the tell
 kubectl get svc {{.WorkloadName}} -n {{.WorkloadNamespace}} -o jsonpath='{.spec.selector}'
