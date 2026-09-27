@@ -6,19 +6,38 @@ Building the lab, checking the machine, and reading back what labctl did.
 
 | Command | What it does |
 |---|---|
-| `labctl init` | Install tools, create the cluster, install platform components. Same as `make setup-tools && make runtime-up && make platform-up`. |
+| `labctl init` | Install tools, start Docker at the lab's size, check Docker's resources, create the cluster, install the platform, then check the cluster is healthy. Safe to re-run: it is also how the lab comes back after a reboot. |
 | `labctl teardown` | Deactivate scenarios and incidents, destroy apps, remove the platform, delete the cluster. |
 | `labctl reset` | `teardown` followed by `init`. |
-| `labctl status` | Cluster info, platform health and deployed apps in one view. |
+| `labctl status` | Cluster info, platform health and deployed apps in one view. When the cluster is configured but not answering it says so, with the reason, instead of listing everything as not installed. |
+
+### What `init` checks
+
+`init` fails loudly rather than reporting a lab that does not work:
+
+- **Docker size.** On macOS, a stopped colima is started at `LAB_CPUS` /
+  `LAB_MEMORY` (default 2 CPU / 4 GB) and never shrunk below its current size.
+  A Docker engine that is already running below the 2 CPU / 4 GB minimum is
+  refused, with the resize command for your setup (colima, Docker Desktop, WSL
+  or native Linux). labctl does not resize a running engine itself, because
+  that would stop your other containers.
+- **Image downloads.** Cluster images are pulled up front with progress; a
+  download that stalls is retried once and then reported, instead of hanging.
+- **Platform.** If Prometheus or Grafana fails to install, `init` exits
+  non-zero and lists what failed. Installs are safe to repeat.
+- **Health.** `init` ends by checking the API server answers and every node is
+  Ready. Only then does it print "Lab is up".
 
 ## Preparing a machine
 
 ### `labctl doctor`
 
-Verifies every external tool the lab depends on: installed, new enough, and the
-cluster reachable. Each problem is reported with why it matters and how to fix
-it. Exits non-zero when anything required is missing, so it is safe as a script
-gate.
+Verifies every external tool the lab depends on (installed and new enough) and
+that Docker is running with at least the lab's minimum of 2 CPU / 4 GB. Each
+problem is reported with why it matters and the exact command that fixes it on
+your setup. Exits non-zero when anything required is missing, Docker is not
+running, or Docker is too small, so it is safe as a script gate. A stopped
+colima is only a note: `labctl init` starts it.
 
 ```bash
 labctl doctor

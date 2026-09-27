@@ -22,8 +22,8 @@ are also enforced hermetically in CI (`test/shell/platform_uninstall.bats`,
 
 ## Preconditions
 
-- Docker/Colima running with ≥4 CPU / 8 GB (see the README; the full stack needs
-  it).
+- Docker/Colima with ≥2 CPU / 4 GB. `labctl init` starts a stopped colima at
+  that size and refuses a running engine that is smaller.
 - `bin/labctl` built (`make cli-build`), or use `make` targets directly.
 - `PROFILE=k3d` (the default).
 

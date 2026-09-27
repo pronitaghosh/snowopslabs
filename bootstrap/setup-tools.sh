@@ -15,6 +15,8 @@ esac
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VERSION_FILE="${SCRIPT_DIR}/../config/versions.env"
+# shellcheck source=../runtimes/_lib/docker.sh
+. "${SCRIPT_DIR}/../runtimes/_lib/docker.sh"
 
 if [ ! -f "$VERSION_FILE" ]; then
   echo "Error: versions.env not found at $VERSION_FILE" >&2
@@ -101,19 +103,6 @@ version_ge() {
 }
 
 # Block until Docker daemon responds or timeout.
-_wait_for_docker() {
-  local retries=0
-  echo "Waiting for Docker daemon..."
-  until docker info &>/dev/null; do
-    retries=$((retries + 1))
-    if [ "$retries" -ge 60 ]; then
-      echo -e "${RED}ERROR: Docker daemon not reachable after 60 s.${NC}" >&2
-      echo "Check logs with: colima status   (macOS) or   sudo journalctl -u docker   (Linux)" >&2
-      exit 1
-    fi
-    sleep 1
-  done
-}
 
 # ---------------------------------------------------------------------------
 # Tool installers
@@ -243,7 +232,7 @@ _install_homebrew() {
   echo -e "${GREEN}Homebrew installed${NC}"
 }
 
-# macOS: install Colima + Docker CLI, then start the VM.
+# macOS: install Colima + Docker CLI, then start the VM at the lab's size.
 install_colima() {
   echo -e "${YELLOW}Setting up Colima (macOS container runtime)...${NC}"
 
@@ -255,15 +244,11 @@ install_colima() {
     echo -e "${GREEN}Colima already installed${NC}"
   fi
 
-  if colima status &>/dev/null; then
-    echo -e "${GREEN}Colima already running${NC}"
+  if docker info &>/dev/null; then
+    echo -e "${GREEN}Docker is already running${NC}"
     return 0
   fi
-
-  echo "Starting Colima (first run may download a VM image — ~1 min)..."
-  colima start
-  _wait_for_docker
-  echo -e "${GREEN}Colima started — Docker daemon ready${NC}"
+  ensure_docker_running || exit 1
 }
 
 # Linux: detect distro ID from /etc/os-release.
@@ -369,7 +354,7 @@ install_docker_linux() {
     echo -e "${YELLOW}NOTE: Run 'newgrp docker' or re-login for the change to take effect.${NC}"
   fi
 
-  _wait_for_docker
+  wait_for_docker 60 || exit 1
   echo -e "${GREEN}Docker Engine installed and running${NC}"
 }
 
@@ -431,9 +416,6 @@ install_k3d_profile() {
   install_docker # Colima on macOS; Docker Engine on Linux
   install_k3d
   install_helm
-  echo -e "${GREEN}Validating cluster details...${NC}"
-  kubectl cluster-info 2>/dev/null ||
-    echo -e "${YELLOW}Cluster not yet running — run 'make runtime-up' first${NC}"
   echo -e "${GREEN}========== K3D Profile Complete ==========${NC}\n"
 }
 

@@ -18,7 +18,9 @@ export interface ClusterInfo {
   server: string
   k8sVersion: string
   nodeCount: number
+  // True only when the API server answered; `error` then says why not.
   connected: boolean
+  error?: string
 }
 
 export interface PlatformComponent {

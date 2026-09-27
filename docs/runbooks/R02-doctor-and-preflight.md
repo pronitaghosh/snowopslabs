@@ -34,14 +34,17 @@ manipulation is a fake binary in a temporary directory placed ahead of your real
 $ ./bin/labctl doctor ; echo "exit=$?"
 ```
 
-**Expect:** a table with one row per tool, then either
+**Expect:** a table with one row per tool, a `Docker:` line with the engine's
+CPU and memory, then either
 
 ```
-✓ Everything SnowOps Labs needs is installed and current.
+✓ Ready to run SnowOps Labs.
 ```
 
-with `exit=0`, or a problems section listing what is genuinely missing on your
-machine with a non-zero exit.
+with `exit=0` (`(see the notes above)` is appended when there are notes), or a
+problems section listing what is genuinely missing on your machine with a
+non-zero exit. A Docker engine below 2 CPU / 4 GB, or a stopped daemon other
+than colima, is a problem; its line ends with the command that fixes it.
 
 🔍 Whatever the outcome, check the table itself:
 

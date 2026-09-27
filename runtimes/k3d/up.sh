@@ -17,42 +17,10 @@ AGENTS="${AGENTS:-2}"
 # rolls the agents to a newer one.
 K3S_VERSION="${K3S_VERSION:-}"
 
-# ---------------------------------------------------------------------------
-# Docker daemon readiness — auto-start Colima on macOS if needed
-# ---------------------------------------------------------------------------
-ensure_docker() {
-  if docker info &>/dev/null; then
-    return 0
-  fi
+# shellcheck source=../_lib/docker.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/_lib/docker.sh"
 
-  echo "Docker daemon not reachable. Checking for a container runtime..."
-
-  if command -v colima &>/dev/null; then
-    echo "Starting Colima..."
-    colima start
-    local retries=0
-    until docker info &>/dev/null; do
-      retries=$((retries + 1))
-      if [ "$retries" -ge 30 ]; then
-        echo "ERROR: Docker daemon still not reachable after 30s." >&2
-        echo "       Run 'colima status' for details." >&2
-        exit 1
-      fi
-      sleep 1
-    done
-    echo "Colima started and Docker daemon is ready."
-    return 0
-  fi
-
-  echo "ERROR: Docker daemon is not running and no supported runtime was found." >&2
-  echo "  macOS options (pick one):" >&2
-  echo "    colima:         brew install colima && colima start" >&2
-  echo "    Docker Desktop: https://www.docker.com/products/docker-desktop" >&2
-  echo "    OrbStack:       https://orbstack.dev" >&2
-  exit 1
-}
-
-ensure_docker
+ensure_docker_running || exit 1
 
 # ---------------------------------------------------------------------------
 # Normalise the kubeconfig API-server host.
@@ -172,6 +140,21 @@ wait_for_nodes() {
     echo "WARNING: not every node reached Ready; 'kubectl get nodes' has the detail." >&2
 }
 
+# k3d_images prints the images `k3d cluster create` will need: the k3s node
+# image (pinned or k3d's default) and k3d's own helper images.
+k3d_images() {
+  local out k3d_ver k3s_ver
+  out="$(k3d version 2>/dev/null || true)"
+  k3d_ver="$(printf '%s\n' "$out" | sed -n 's/^k3d version \(v[^ ]*\).*/\1/p' | head -n 1)"
+  k3s_ver="${K3S_VERSION:-$(printf '%s\n' "$out" | sed -n 's/^k3s version \(v[^ ]*\).*/\1/p' | head -n 1)}"
+  [ -n "$k3s_ver" ] && printf 'rancher/k3s:%s\n' "$k3s_ver"
+  if [ -n "$k3d_ver" ]; then
+    printf 'ghcr.io/k3d-io/k3d-tools:%s\n' "${k3d_ver#v}"
+    printf 'ghcr.io/k3d-io/k3d-proxy:%s\n' "${k3d_ver#v}"
+  fi
+  return 0
+}
+
 # Disable the bundled Traefik so we manage our own install in the traefik namespace.
 # This prevents two competing Traefik instances from causing 404 errors.
 create_cluster() {
@@ -200,7 +183,26 @@ create_cluster() {
     create_args+=(--image "rancher/k3s:${K3S_VERSION}")
   fi
 
-  k3d cluster create "${create_args[@]}"
+  # Pull the images first, with progress and a stall timeout: k3d pulls them
+  # silently, so a stalled download used to look like a hung `init`.
+  echo "Downloading cluster images (first run only, a few hundred MB)..."
+  local images=() img
+  while IFS= read -r img; do
+    [ -n "$img" ] && images+=("$img")
+  done < <(k3d_images)
+  # The +-expansion keeps bash 3.2 (macOS) quiet about an empty array under set -u.
+  prepull_images ${images[@]+"${images[@]}"} || exit 1
+
+  # --timeout rolls back a creation that never finishes; one retry covers a
+  # transient failure without leaving a half-built cluster behind.
+  if ! k3d cluster create "${create_args[@]}" --timeout 300s; then
+    echo "Cluster creation failed — cleaning up and retrying once..." >&2
+    k3d cluster delete "$CLUSTER_NAME" >/dev/null 2>&1 || true
+    k3d cluster create "${create_args[@]}" --timeout 300s || {
+      echo "ERROR: k3d could not create the cluster. 'labctl doctor' checks Docker's resources." >&2
+      exit 1
+    }
+  fi
 
   kubectl config use-context "k3d-$CLUSTER_NAME"
   normalize_apiserver_host

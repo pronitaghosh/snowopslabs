@@ -28,10 +28,10 @@ for bin in docker kind kubectl; do
   fi
 done
 
-if ! docker info >/dev/null 2>&1; then
-  echo "ERROR: Docker daemon is not reachable. Start Docker and retry." >&2
-  exit 1
-fi
+# shellcheck source=../_lib/docker.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/_lib/docker.sh"
+
+ensure_docker_running || exit 1
 
 # port_free <port> — 0 if nothing is listening on the host TCP port, non-zero if
 # it is already taken. Uses bash's /dev/tcp so it needs no nc/lsof/ss (which

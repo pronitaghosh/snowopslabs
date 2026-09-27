@@ -13,7 +13,7 @@ read.
 
 ## Preconditions
 
-- Docker/Colima running with ≥4 CPU / 8 GB.
+- Docker/Colima running with ≥2 CPU / 4 GB (`labctl init` starts colima at that size).
 - `bin/labctl` built (`make cli-build`).
 - A cluster with the monitoring stack: `make init` then
   `labctl platform up monitoring/metrics monitoring/grafana`.

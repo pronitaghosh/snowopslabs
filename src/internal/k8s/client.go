@@ -5,6 +5,7 @@
 package k8s
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -22,7 +23,10 @@ type ClusterInfo struct {
 	Server     string `json:"server"`
 	K8sVersion string `json:"k8sVersion"`
 	NodeCount  int    `json:"nodeCount"`
-	Connected  bool   `json:"connected"`
+	// Connected means the API server answered, not merely that a context is
+	// configured. When it is false, Error says why in kubectl's words.
+	Connected bool   `json:"connected"`
+	Error     string `json:"error,omitempty"`
 }
 
 // PodInfo holds information about a pod.
@@ -74,6 +78,10 @@ func GetClusterInfo(ctx context.Context) (*ClusterInfo, error) {
 		return info, nil //nolint:nilerr // no current-context means not connected — report empty info, not an error
 	}
 	info.Context = ctxOut
+	if err := Reachable(ctx); err != nil {
+		info.Error = unreachableReason(err)
+		return info, nil
+	}
 	info.Connected = true
 
 	serverOut, err := kubectl(ctx, "config", "view", "--minify", "-o", "jsonpath={.clusters[0].cluster.server}")
@@ -427,6 +435,28 @@ func uniqueLines(out string) []string {
 }
 
 // RunKubectl executes a kubectl command and returns its stdout.
+// Reachable asks the current context's API server whether it is ready. A
+// configured context says nothing about whether the cluster is up.
+func Reachable(ctx context.Context) error {
+	_, err := kubectl(ctx, "get", "--raw=/readyz", "--request-timeout=5s")
+	return err
+}
+
+// unreachableReason turns a failed probe into one short line, such as
+// "net/http: TLS handshake timeout".
+func unreachableReason(err error) string {
+	msg := err.Error()
+	if i := strings.LastIndex(msg, "\n"); i >= 0 {
+		msg = msg[i+1:]
+	}
+	msg = strings.TrimPrefix(msg, "exit status 1: ")
+	msg = strings.TrimPrefix(msg, "Unable to connect to the server: ")
+	if len(msg) > 200 {
+		msg = msg[:200] + "…"
+	}
+	return msg
+}
+
 func RunKubectl(ctx context.Context, args ...string) (string, error) {
 	return kubectl(ctx, args...)
 }
@@ -441,6 +471,11 @@ func kubectl(ctx context.Context, args ...string) (string, error) {
 	cmd.Env = os.Environ()
 	out, err := cmd.Output()
 	if err != nil {
+		// Keep kubectl's own explanation; "exit status 1" alone says nothing.
+		var ee *exec.ExitError
+		if errors.As(err, &ee) && len(bytes.TrimSpace(ee.Stderr)) > 0 {
+			return "", fmt.Errorf("%w: %s", err, strings.TrimSpace(string(ee.Stderr)))
+		}
 		return "", err
 	}
 	return strings.TrimSpace(string(out)), nil

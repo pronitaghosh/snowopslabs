@@ -220,7 +220,7 @@ func (s *Server) resolveUIFS() http.FileSystem {
 	if s.uiFS != nil {
 		if _, err := fs.Stat(s.uiFS, "index.html"); err == nil {
 			fsys := http.FS(s.uiFS)
-			s.uiSource = fmt.Sprintf("embedded UI [%s] — rebuild with `make cli-build` to update", uiBundleName(fsys))
+			s.uiSource = fmt.Sprintf("embedded UI [%s]", uiBundleName(fsys))
 			return fsys
 		}
 	}
@@ -235,7 +235,7 @@ func (s *Server) resolveUIFS() http.FileSystem {
 		}
 	}
 	fallback := filepath.Join(s.cfg.ProjectRoot, "src", "ui", "dist")
-	s.uiSource = "UI not found (no embedded bundle and no built dist) — run `make ui`"
+	s.uiSource = "UI not found: this labctl was built without it. Install a release build, or build from source with `make cli-build`"
 	return http.Dir(fallback)
 }
 

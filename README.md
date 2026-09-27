@@ -106,22 +106,25 @@ You need two things before anything else: **Docker with enough memory**, and the
 tools for you — pin versions live in [`config/versions.env`](config/versions.env)
 — so the only manual step is giving Docker enough resources.
 
-**Docker needs at least 4 CPUs and 8 GB of memory.** `labctl init` runs a 3-node
-k3d cluster plus the full platform stack (Prometheus, Grafana, Alertmanager,
-Loki, …). The 2 GB a fresh Docker VM ships with is not enough; it shows up as
-API-server "TLS handshake timeout" errors partway through the install. Set the
-resources the way your platform expects:
+**Docker needs at least 2 CPUs and 4 GB of memory.** That runs the cluster, the
+baseline platform (Traefik, Prometheus, Grafana) and the lighter scenarios;
+heavier ones need more, and `labctl doctor` shows what you have. Below the
+minimum the API server runs out of memory and every command fails with "TLS
+handshake timeout", so `labctl init` refuses to start on a smaller engine and
+prints the fix.
 
 ### macOS
 
-- **Docker Desktop:** Settings → Resources → raise Memory to **8 GB** (and CPUs
-  to 4), then Apply & Restart.
-- **Colima** (lightweight CLI alternative): `colima start --cpu 4 --memory 8`
+- **Colima** (the default): nothing to do. `labctl init` starts it at 2 CPU /
+  4 GB. To give it more, set `LAB_CPUS` / `LAB_MEMORY` in `.env`. A VM that is
+  already running is never resized for you: `colima stop && colima start --cpu 2 --memory 4`.
+- **Docker Desktop:** Settings → Resources → at least 2 CPUs and 4 GB, then
+  Apply & Restart.
 
 ### Linux
 
 - Docker runs natively, so it already uses your machine's CPU and RAM — no VM to
-  resize. Just make sure the host has ≥4 CPUs and ≥8 GB free.
+  resize. Make sure the host has ≥2 CPUs and ≥4 GB free.
 - Install Docker Engine and add yourself to the `docker` group
   (`sudo usermod -aG docker $USER`, then log out and back in) so `labctl` can
   talk to the daemon without `sudo`.
@@ -131,9 +134,10 @@ resources the way your platform expects:
 - Run **everything inside WSL2** (Ubuntu recommended) — never native Windows
   PowerShell. Treat the WSL shell as a normal Linux box for every command below.
 - Either enable **Docker Desktop → Settings → Resources → WSL Integration** for
-  your distro, or run a native Docker daemon inside WSL. The same ≥4 CPU / 8 GB
-  applies — set it in `.wslconfig` on the Windows side if you use a native
-  daemon. Full details in [Running on WSL](#running-on-wsl).
+  your distro, or run a native Docker daemon inside WSL. Memory comes from WSL
+  itself: set at least `memory=4GB` and `processors=2` under `[wsl2]` in
+  `%UserProfile%\.wslconfig`, then `wsl --shutdown`. Full details in
+  [Running on WSL](#running-on-wsl).
 
 > **Building from source?** Contributors additionally need **Go 1.25+** and
 > **Node 22+**. End users following the Quickstart below do **not** — the
@@ -252,8 +256,9 @@ labctl teardown                       # remove everything (never hangs)
 | Browser can't reach `*.k3d.local` URLs (`no such host`) | Ingress routes by hostname, which needs a local DNS entry. Run `labctl hosts add` once (sudo). The labctl UI at `http://localhost:3939` never needs this. No sudo? Set `DOMAIN_SUFFIX=127.0.0.1.nip.io` in `.env` (a wildcard DNS that resolves to localhost, needs internet) and re-run `labctl platform up`. |
 | `required app(s) not deployed` when starting a scenario/challenge | The scenario needs an app that isn't running. Deploy it (`labctl app build <name> && labctl app deploy <name>`) or re-run with `--deploy-prereqs` to do it automatically. |
 | Something is wedged and you want a clean slate | `labctl reset` (teardown + init) rebuilds the lab; `labctl scenario down <name>` / `labctl incident resolve` undo a single activation. |
-| `TLS handshake timeout` / OOM-killed pods partway through init | The Docker VM is too small. Give it ≥4 CPU / 8 GB (`colima start --cpu 4 --memory 8`, or Docker Desktop → Resources), then `labctl reset`. |
-| `init` seems stuck | First run pulls many images. Watch progress with `kubectl get pods -A -w`. |
+| `TLS handshake timeout` / OOM-killed pods | Docker is short of memory. `labctl doctor` shows its size and the exact resize command for your setup; resize, then re-run `labctl init`. |
+| The UI or `labctl status` says the cluster is unreachable (e.g. after a reboot) | Docker or colima stopped. Run `labctl init`: it starts colima at the lab's size, restarts dead nodes and checks the lab is healthy, without losing anything. |
+| `init` seems slow | The first run downloads the VM image and cluster images (a few hundred MB each) and shows their progress. A download that stalls is retried once and then reported, rather than hanging. |
 | A tool is missing or too old | `labctl doctor` names each missing/outdated tool and how to fix it. |
 | Teardown left something behind | `labctl teardown` is safe to re-run; for k3d/kind it deletes the whole cluster. |
 | Which runtime should I use? | `k3d` (default, local), `kind` (CI parity), `incluster` (team server). See [runtime profiles](docs/runtime-profiles.md). |
@@ -268,8 +273,8 @@ gotchas to know:
 
 1. **Docker.** Either enable **Docker Desktop → Settings → Resources → WSL
    Integration** for your distro, or run a native Docker daemon inside WSL. The
-   same ≥4 CPU / 8 GB requirement applies (set it in `.wslconfig` on the Windows
-   side if you use a native daemon).
+   same ≥2 CPU / 4 GB requirement applies (set it in `.wslconfig` on the Windows
+   side; it governs both a native daemon and Docker Desktop's WSL2 backend).
 2. **Reaching services from a Windows browser.**
    - The **UI** (`labctl ui`, `http://localhost:3939`) just works — WSL2 forwards
      `localhost` to Windows. `labctl ui` opens it via `wslview` (install

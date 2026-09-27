@@ -74,15 +74,6 @@ export function Dashboard({ notify, liveCluster, lastStatusAt, requestConfirm }:
         </div>
       )}
 
-      {c && !c.connected && (
-        <div className="banner banner-warn" role="alert">
-          <Icon name="alert-triangle" size={16} className="banner-icon" />
-          <span className="banner-body">
-            Cluster is unreachable — actions will fail until it is back. Try <code>labctl status</code> or switch the runtime.
-          </span>
-        </div>
-      )}
-
       <div className="grid">
         {/* Cluster card */}
         <div className="card">

@@ -81,6 +81,8 @@ var rootCmd = &cobra.Command{
 		scriptExec.SetEnv("DOMAIN_SUFFIX", cfg.DomainSuffix)
 		scriptExec.SetEnv("HTTP_PORT", cfg.HTTPPort)
 		scriptExec.SetEnv("HTTPS_PORT", cfg.HTTPSPort)
+		scriptExec.SetEnv("LAB_CPUS", cfg.LabCPUs)
+		scriptExec.SetEnv("LAB_MEMORY", cfg.LabMemory)
 		scriptExec.SetEnv("INGRESS_CLASS", cfg.IngressClass)
 		scriptExec.SetEnv("INGRESS_PROVIDER", cfg.IngressProvider)
 		scriptExec.SetEnv("STORAGE_CLASS", cfg.StorageClass)

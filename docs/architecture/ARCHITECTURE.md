@@ -78,6 +78,7 @@ src/internal/run/               durable run engine
 src/internal/store/             SQLite persistence + migrations
 src/internal/catalog/           declarative content loading + validation
 src/internal/toolchain/         external binary adapters + fakes
+src/internal/capacity/          Docker CPU/memory vs the lab's needs, and the per-OS fix
 src/internal/config/            layered config resolution
 src/pkg/checks/                 public: the check engine
 src/pkg/scenario/               public: content types + schema
@@ -86,7 +87,8 @@ src/ui/                         React SPA (built, embedded into the binary)
 ```
 
 The user-facing content (`scenarios/`, `incidents/`, `apps/`, `platform/`,
-`runtimes/`) stays at the repo root; `labctl` discovers it by walking up from the
+`runtimes/`) stays at the repo root (`runtimes/_lib/` holds the Docker helpers
+the runtimes and `bootstrap/setup-tools.sh` share); `labctl` discovers it by walking up from the
 working directory (it keys on `scenarios/` + `runtimes/`), so it runs unchanged
 from the repo root even though the binary is built under `src/`.
 

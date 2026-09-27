@@ -28,6 +28,10 @@ type Config struct {
 	ClusterName string
 	HTTPPort    string
 	HTTPSPort   string
+	// LabCPUs and LabMemory size the Docker VM labctl starts (colima). They
+	// never shrink one the user already runs.
+	LabCPUs   string
+	LabMemory string
 
 	// Runtime-specific
 	IngressClass        string
@@ -126,6 +130,8 @@ func Load(projectRoot string) (*Config, error) {
 	cfg.ClusterName = resolveEnv(fileVals, "CLUSTER_NAME", "snowops")
 	cfg.HTTPPort = resolveEnv(fileVals, "HTTP_PORT", "80")
 	cfg.HTTPSPort = resolveEnv(fileVals, "HTTPS_PORT", "443")
+	cfg.LabCPUs = resolveEnv(fileVals, "LAB_CPUS", "2")
+	cfg.LabMemory = resolveEnv(fileVals, "LAB_MEMORY", "4")
 
 	cfg.IngressClass = resolveEnv(fileVals, "INGRESS_CLASS", "traefik")
 	cfg.StorageClass = resolveEnv(fileVals, "STORAGE_CLASS", "local-path")
@@ -325,7 +331,8 @@ func availableProfiles(projectRoot string) string {
 	}
 	var names []string
 	for _, e := range entries {
-		if e.IsDir() {
+		// runtimes/_lib holds shared helpers, not a profile.
+		if e.IsDir() && !strings.HasPrefix(e.Name(), "_") {
 			names = append(names, e.Name())
 		}
 	}

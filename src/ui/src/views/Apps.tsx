@@ -3,7 +3,7 @@ import { api } from '../api/client'
 import { qk } from '../lib/queryClient'
 import { useApiQuery } from '../hooks/useApiQuery'
 import type { AppInfo, AppDetail, AppFileRef, NotifyFn } from '../types'
-import { Badge, DeployedBadge } from '../components/Badge'
+import { Badge, DeployedBadge, UnknownBadge } from '../components/Badge'
 import { ErrorState } from '../components/ErrorState'
 import { Icon } from '../components/Icon'
 import { Tabs, type TabItem } from '../components/Tabs'
@@ -14,6 +14,8 @@ import type { ConfirmRequest } from '../components/ConfirmDialog'
 interface AppsProps {
   notify: NotifyFn
   requestConfirm: (req: ConfirmRequest) => void
+  // See PlatformProps.clusterDown.
+  clusterDown?: boolean
 }
 
 /** Turns a raw HPA metric name into readable words, e.g.
@@ -30,7 +32,7 @@ function hpaMetricTitle(hpa: NonNullable<AppInfo['hpa']>): string {
     `The autoscaler adds replicas when the average exceeds the target and removes them when it stays below.`
 }
 
-export function Apps({ notify, requestConfirm }: AppsProps) {
+export function Apps({ notify, requestConfirm, clusterDown = false }: AppsProps) {
   // /status carries apps + domainSuffix + platform in one call; the Dashboard
   // shares this same cache key, so both views fetch it once.
   const { data, loading, loaded, loadError, refreshing, reload: load } = useApiQuery(qk.status, api.getStatus)
@@ -158,7 +160,7 @@ export function Apps({ notify, requestConfirm }: AppsProps) {
                   )}
                 </div>
 
-                <DeployedBadge deployed={a.deployed} />
+                {clusterDown ? <UnknownBadge /> : <DeployedBadge deployed={a.deployed} />}
 
                 <div className="btn-group">
                   {a.deployed && a.url && (
@@ -182,14 +184,14 @@ export function Apps({ notify, requestConfirm }: AppsProps) {
                   </button>
                   <button
                     className="btn btn-sm"
-                    disabled={busy[a.name]}
+                    disabled={busy[a.name] || clusterDown}
                     onClick={() => run(a.name, `Build ${a.name}`, () => api.buildApp(a.name), () => load())}
                   >
                     {busy[a.name] ? 'Working…' : (<><Icon name="hammer" size={14} />Build</>)}
                   </button>
                   <button
                     className="btn btn-sm btn-primary"
-                    disabled={busy[a.name]}
+                    disabled={busy[a.name] || clusterDown}
                     onClick={() => run(a.name, `Deploy ${a.name}`, () => api.deployApp(a.name), () => load())}
                   >
                     Deploy

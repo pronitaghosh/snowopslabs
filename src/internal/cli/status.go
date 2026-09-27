@@ -21,8 +21,7 @@ var statusCmd = &cobra.Command{
 		fmt.Println("=== Cluster ===")
 		info, err := k8s.GetClusterInfo(ctx)
 		if err != nil || !info.Connected {
-			fmt.Println("  Status: NOT CONNECTED")
-			fmt.Printf("  Profile: %s\n", cfg.Profile)
+			printUnreachable(info)
 			return nil
 		}
 		fmt.Printf("  Context:  %s\n", info.Context)
@@ -55,6 +54,24 @@ var statusCmd = &cobra.Command{
 
 		return nil
 	},
+}
+
+// printUnreachable explains a cluster that cannot be reached. Platform and app
+// state are not printed: without the API they would all read "not installed".
+func printUnreachable(info *k8s.ClusterInfo) {
+	switch {
+	case info == nil || info.Context == "":
+		fmt.Println("  Status:   NO CLUSTER (no kubectl context is set)")
+		fmt.Printf("  Profile:  %s\n", cfg.Profile)
+		fmt.Println("\nCreate the lab with: labctl init")
+	default:
+		fmt.Printf("  Status:   UNREACHABLE (%s)\n", info.Error)
+		fmt.Printf("  Context:  %s\n", info.Context)
+		fmt.Printf("  Profile:  %s\n", cfg.Profile)
+		fmt.Println("\nThe cluster is configured but not answering. Usually Docker is stopped (after a")
+		fmt.Println("reboot) or short of memory. 'labctl doctor' checks Docker; 'labctl init' brings")
+		fmt.Println("the lab back without losing it.")
+	}
 }
 
 // providerState reports a platform component's state from its pods'

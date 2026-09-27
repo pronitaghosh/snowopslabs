@@ -3,12 +3,19 @@
 package cli
 
 import (
+	"context"
+	"errors"
 	"fmt"
+	"runtime"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 
+	"github.com/sagar2395/snowopslabs/internal/capacity"
 	"github.com/sagar2395/snowopslabs/internal/config"
+	"github.com/sagar2395/snowopslabs/internal/k8s"
+	"github.com/sagar2395/snowopslabs/internal/toolchain"
 )
 
 var initCmd = &cobra.Command{
@@ -20,21 +27,81 @@ var initCmd = &cobra.Command{
 			return fmt.Errorf("setup-tools failed: %w", err)
 		}
 
+		if err := preflightDocker(cmdContext(cmd), toolchain.NewExec(), cfg.Profile, runtime.GOOS, isWSL()); err != nil {
+			return err
+		}
+
 		fmt.Println("\n=== Creating runtime ===")
 		if err := scriptExec.RunScript(
 			fmt.Sprintf("runtimes/%s/up.sh", cfg.Profile),
 			cfg.ClusterName,
 		); err != nil {
-			return fmt.Errorf("runtime-up failed: %w", err)
+			return fmt.Errorf("creating the cluster failed: %w", err)
 		}
 
 		fmt.Println("\n=== Installing platform ===")
 		if err := platformUpRun(cmd, args); err != nil {
 			return err
 		}
+		if err := checkClusterHealthy(cmdContext(cmd)); err != nil {
+			return err
+		}
 		printPostInitHints()
 		return nil
 	},
+}
+
+// preflightDocker refuses to build the lab on a Docker engine that cannot hold
+// it. setup-tools has already started a stopped colima at LAB_CPUS/LAB_MEMORY,
+// so a failure here is a daemon that will not start or one the user runs at a
+// smaller size — which labctl does not resize, since restarting it would stop
+// the user's other containers.
+func preflightDocker(ctx context.Context, runner toolchain.Runner, profile, goos string, wsl bool) error {
+	if profile == "incluster" {
+		return nil
+	}
+	fmt.Println("\n=== Checking Docker resources ===")
+	host := capacity.DetectHost(ctx, runner, goos, wsl)
+	res, err := capacity.Probe(ctx, runner)
+	switch {
+	case errors.Is(err, capacity.ErrDockerMissing), errors.Is(err, capacity.ErrDaemonDown):
+		return fmt.Errorf("%w.\nStart it, then re-run 'labctl init':\n  %s", err, host.StartHint(capacity.Floor))
+	case err != nil:
+		return fmt.Errorf("reading Docker's CPU and memory: %w", err)
+	}
+	if short := capacity.Shortfall(res, capacity.Floor); short != "" {
+		return fmt.Errorf("docker is too small for the lab. %s\n"+
+			"labctl does not resize a running Docker engine, because that would stop your other containers.\n"+
+			"Resize it, then re-run 'labctl init':\n  %s", short, host.ResizeHint(capacity.Floor))
+	}
+	fmt.Printf("Docker has %s (minimum %s).\n", res, capacity.Floor)
+	return nil
+}
+
+// checkClusterHealthy is init's last step: it only reports "Lab is up" once
+// the API answers and every node is Ready.
+func checkClusterHealthy(ctx context.Context) error {
+	fmt.Println("\n=== Checking the lab ===")
+	if err := k8s.Reachable(ctx); err != nil {
+		return fmt.Errorf("the cluster is not answering (%v).\n"+
+			"This is almost always Docker running out of memory. Check with 'labctl doctor', then re-run 'labctl init'", err)
+	}
+	wctx, cancel := context.WithTimeout(ctx, 3*time.Minute)
+	defer cancel()
+	if _, err := k8s.RunKubectl(wctx, "wait", "--for=condition=Ready", "node", "--all", "--timeout=150s"); err != nil {
+		return fmt.Errorf("not every node became Ready: %w\nSee which with 'kubectl get nodes', then re-run 'labctl init'", err)
+	}
+	fmt.Println("API server ready; all nodes Ready.")
+	return nil
+}
+
+// cmdContext is the command's context, or Background when it has none (as
+// when a test calls RunE directly).
+func cmdContext(cmd *cobra.Command) context.Context {
+	if ctx := cmd.Context(); ctx != nil {
+		return ctx
+	}
+	return context.Background()
 }
 
 func printPostInitHints() {
