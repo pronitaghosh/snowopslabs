@@ -1,0 +1,105 @@
+# Fresh-machine onboarding on Linux: the path a new user takes, end to end.
+#
+# It builds a release the way the release workflow does (goreleaser, content
+# included), installs it with install.sh from that local build, then runs the
+# README's first-lab steps from the home directory, outside any checkout:
+# doctor, init (tools, Docker preflight, cluster, platform, health gate), a
+# scenario with --deploy-prereqs, status and teardown.
+name: onboarding
+
+on:
+  pull_request:
+    paths:
+      - install.sh
+      - bootstrap/**
+      - runtimes/**
+      - config/**
+      - platform/ingress/**
+      - platform/monitoring/**
+      - scripts/stage-release-content.sh
+      - src/.goreleaser.yaml
+      - src/internal/capacity/**
+      - src/internal/config/**
+      - src/internal/service/admission/**
+      - src/internal/cli/init_cmd.go
+      - src/internal/cli/doctor.go
+      - src/internal/cli/prereqs.go
+      - .github/workflows/onboarding.yaml
+  schedule:
+    - cron: '43 3 * * *' # nightly at 03:43 UTC
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  linux:
+    name: install.sh + labctl init on a fresh runner
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # goreleaser reads tags for the version
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: src/go.mod
+          cache-dependency-path: src/go.sum
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: src/ui/package-lock.json
+
+      - name: Build a release snapshot
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: '~> v2'
+          args: release --snapshot --clean --skip=publish
+          workdir: src
+
+      - name: Serve the snapshot as a local release
+        id: release
+        run: |
+          archive="$(ls src/dist/labctl_*_linux_amd64.tar.gz)"
+          version="$(basename "$archive" | sed 's/^labctl_\(.*\)_linux_amd64\.tar\.gz$/\1/')"
+          mkdir -p "rel/download/v${version}"
+          cp "$archive" src/dist/checksums.txt "rel/download/v${version}/"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+
+      - name: Install with install.sh
+        env:
+          SNOWOPS_RELEASE_URL: file://${{ github.workspace }}/rel
+          SNOWOPS_VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          sh install.sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: labctl doctor
+        working-directory: /home/runner
+        run: labctl doctor
+
+      - name: labctl init
+        working-directory: /home/runner
+        run: labctl init
+
+      - name: Run a scenario the way the README does
+        working-directory: /home/runner
+        run: |
+          labctl scenario up env-promotion --deploy-prereqs
+          labctl status
+
+      - name: Dump cluster state on failure
+        if: failure()
+        run: |
+          kubectl get nodes -o wide || true
+          kubectl get pods -A -o wide || true
+          docker stats --no-stream || true
+
+      - name: Tear down
+        if: always()
+        working-directory: /home/runner
+        run: labctl teardown || true
