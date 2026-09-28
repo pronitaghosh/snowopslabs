@@ -73,7 +73,7 @@ checks:
     query: 'max(up{job="chaos-mesh-controller-manager"}) or vector(0)'
     operator: "=="
     value: "1"
-    remediation: "Prometheus is not scraping Chaos Mesh, so every chaos panel will stay blank. Re-apply the ServiceMonitor: kubectl apply -f scenarios/chaos-engineering/manifests/chaos-servicemonitor.yaml — note the metrics port on chaos-mesh-controller-manager is named 'http' (10080), not 'metrics'."
+    remediation: "Prometheus is not scraping Chaos Mesh, so every chaos panel will stay blank. Re-apply the ServiceMonitor: kubectl apply -f {{.ProjectRoot}}/scenarios/chaos-engineering/manifests/chaos-servicemonitor.yaml — note the metrics port on chaos-mesh-controller-manager is named 'http' (10080), not 'metrics'."
 
   - name: workload-healthy
     type: http
@@ -88,7 +88,7 @@ checks:
     type: script
     script: checks/experiment-was-run.sh
     pending: true
-    remediation: "You have not run an experiment yet. Start load first, then inject one failure: labctl traffic start --app {{.WorkloadName}} --profile browse --rps 20 --duration 30m && bash scenarios/chaos-engineering/scripts/inject.sh pod-kill --app {{.WorkloadName}} --namespace {{.WorkloadNamespace}} — then watch the blast radius on http://grafana.{{.IngressURLSuffix}}/d/chaos-engineering"
+    remediation: "You have not run an experiment yet. Start load first, then inject one failure: labctl traffic start --app {{.WorkloadName}} --profile browse --rps 20 --duration 30m && bash {{.ProjectRoot}}/scenarios/chaos-engineering/scripts/inject.sh pod-kill --app {{.WorkloadName}} --namespace {{.WorkloadNamespace}} — then watch the blast radius on http://grafana.{{.IngressURLSuffix}}/d/chaos-engineering"
 
   - name: workload-survives-pod-loss
     type: kubectl

@@ -85,7 +85,7 @@ checks:
     jsonpath: "{.status.readyReplicas}"
     operator: ">="
     value: "3"
-    remediation: "The ramped producers are not running, so any drop in lag is the load going away rather than the consumers catching up. Restore them: kubectl -n kafka apply -f scenarios/event-driven-arch/manifests/ramp-producers.yaml"
+    remediation: "The ramped producers are not running, so any drop in lag is the load going away rather than the consumers catching up. Restore them: kubectl -n kafka apply -f {{.ProjectRoot}}/scenarios/event-driven-arch/manifests/ramp-producers.yaml"
 
   # The dashboards are only useful if Prometheus is actually scraping Kafka.
   # These two checks turn "the dashboard is empty" from a mystery into a
@@ -95,7 +95,7 @@ checks:
     query: 'count(kafka_server_replicamanager_partitioncount)'
     operator: ">="
     value: "1"
-    remediation: "Prometheus is not scraping the Kafka brokers. Check that the Kafka CR has spec.kafka.metricsConfig (platform/data/kafka/install.sh applies the kafka-metrics ConfigMap), and that the kafka-broker PodMonitor is selected: kubectl -n kafka get podmonitor kafka-broker -o yaml — it needs the release label the Prometheus CR's podMonitorSelector expects."
+    remediation: "Prometheus is not scraping the Kafka brokers. Check that the Kafka CR has spec.kafka.metricsConfig ({{.ProjectRoot}}/platform/data/kafka/install.sh applies the kafka-metrics ConfigMap), and that the kafka-broker PodMonitor is selected: kubectl -n kafka get podmonitor kafka-broker -o yaml — it needs the release label the Prometheus CR's podMonitorSelector expects."
 
   - name: consumer-lag-metrics-scraped
     type: promql

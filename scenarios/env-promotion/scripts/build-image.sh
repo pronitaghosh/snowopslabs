@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 . "$(dirname "$0")/../../_lib/workload.sh"
+# The build script and the app sources are addressed from the clone's root, so
+# this works when a learner runs it from any directory.
+cd "${PROJECT_ROOT:-$(cd "$(dirname "$0")/../../.." && pwd)}"
 
 TAG="${1:?Usage: build-image.sh <tag>   e.g. build-image.sh v1.1.0}"
 

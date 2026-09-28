@@ -51,7 +51,7 @@ if [ -z "$LAST_EXP" ] || [ "$LAST_EXP" -lt "$HARDENED" ] 2>/dev/null; then
   echo "  The first attack proved the outage; this one proves it is gone. Repeat it now that" >&2
   echo "  the service has somewhere to fail over to:" >&2
   echo "    kubectl delete podchaos pod-kill-${WORKLOAD} -n ${NS} --ignore-not-found" >&2
-  echo "    bash scenarios/chaos-engineering/scripts/inject.sh pod-kill --app ${WORKLOAD} --namespace ${NS}" >&2
+  echo "    bash ${PROJECT_ROOT:-.}/scenarios/chaos-engineering/scripts/inject.sh pod-kill --app ${WORKLOAD} --namespace ${NS}" >&2
   exit 1
 fi
 

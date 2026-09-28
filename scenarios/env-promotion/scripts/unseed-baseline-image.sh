@@ -12,7 +12,7 @@ set -euo pipefail
 . "$(dirname "$0")/../../_lib/workload.sh"
 
 APP="${WORKLOAD_NAME}"
-STATE="${PROJECT_ROOT:-.}/.labctl/env-promotion/pre-existing-tags"
+STATE="${LAB_STATE_DIR:-${SNOWOPS_HOME:-$HOME/.snowops}/state/${CLUSTER_NAME:-snowops}}/env-promotion/pre-existing-tags"
 
 if ! command -v docker >/dev/null 2>&1; then
   echo "docker is not available; nothing to clean up locally."

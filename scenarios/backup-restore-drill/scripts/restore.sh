@@ -16,9 +16,11 @@ set -euo pipefail
 # object-count summary instead.
 #
 # Env:
-#   BACKUP_DIR  where archives live (default: .labctl/backups)
+#   BACKUP_DIR  where archives live (default: <lab state dir>/backups)
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# The clone this script belongs to, for the commands it prints.
+LAB_ROOT="${PROJECT_ROOT:-$(cd "$SCRIPT_DIR/../../.." && pwd)}"
 # shellcheck source=scripts/_backup_lib.sh
 . "${SCRIPT_DIR}/_backup_lib.sh"
 
@@ -27,7 +29,7 @@ ARCHIVE="${2:-$(archive_path "$NS")}"
 
 if [ ! -f "$ARCHIVE" ]; then
   echo "ERROR: backup archive not found: ${ARCHIVE}" >&2
-  echo "       Create one first: bash scenarios/backup-restore-drill/scripts/backup.sh ${NS}" >&2
+  echo "       Create one first: bash ${LAB_ROOT}/scenarios/backup-restore-drill/scripts/backup.sh ${NS}" >&2
   exit 1
 fi
 

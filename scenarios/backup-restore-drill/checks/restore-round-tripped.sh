@@ -14,7 +14,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 NS="$(backup_ns "")"
 ARCHIVE="$(archive_path "$NS")"
-RESTORE_CMD="  bash scenarios/backup-restore-drill/scripts/restore.sh ${NS}"
+RESTORE_CMD="  bash ${PROJECT_ROOT:-.}/scenarios/backup-restore-drill/scripts/restore.sh ${NS}"
 
 if [ ! -f "$ARCHIVE" ]; then
   echo "FAIL: no archive at ${ARCHIVE} — there is nothing to have restored from." >&2
