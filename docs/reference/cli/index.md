@@ -5,36 +5,30 @@ runs scenarios, injects faults and grades your fix.
 
 ## Install
 
-**Download a release** — no Go or Node needed. Pick the archive for your
-OS/arch from the [Releases page](https://github.com/sagar2395/snowopslabs/releases).
-macOS, Linux and Windows (inside WSL2) use the same commands:
-
 ```bash
-VERSION=1.0.0                                          # from the Releases page
-OS=$(uname -s | tr '[:upper:]' '[:lower:]')            # darwin | linux
-ARCH=$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')
-BASE="https://github.com/sagar2395/snowopslabs/releases/download/v${VERSION}"
-
-curl -fsSL "${BASE}/labctl_${VERSION}_${OS}_${ARCH}.tar.gz" | tar xz labctl
-sudo mv labctl /usr/local/bin/
-labctl --version
+curl -fsSL https://raw.githubusercontent.com/sagar2395/snowopslabs/main/install.sh | sh
 ```
 
-**Build from source** — needs Go 1.25+ and Node 22+:
+The installer puts `labctl` in `~/.local/bin` and the lab content in
+`~/.snowops/lab`, with no sudo; re-run it to upgrade. Set `SNOWOPS_VERSION` for
+a specific release. The per-OS guides are under
+[Getting started](../../getting-started/macos.md).
+
+Outside a checkout, `labctl` uses the installed lab; inside a checkout it uses
+the checkout's content. `--project-dir` chooses explicitly.
+
+**Build from source** (contributors) — needs Go 1.25+ and Node 22+; see
+[CONTRIBUTING](../../../CONTRIBUTING.md#development-setup):
 
 ```bash
 make cli-build        # builds bin/labctl with the UI embedded
-make cli-install      # builds and copies onto your PATH
 ```
-
-The [Quickstart](../../../README.md#quickstart) has the per-OS walkthrough,
-including checksum verification.
 
 ## Global flags
 
 | Flag | Default | Description |
 |---|---|---|
-| `--project-dir` | auto-detected | Project root directory |
+| `--project-dir` | auto-detected | The lab content to use: a checkout, or the installed `~/.snowops/lab` |
 | `-v, --verbose` | `false` | Debug logging: config load, script exec, API calls |
 | `--version` | — | Print the build version |
 

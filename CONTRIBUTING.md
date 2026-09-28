@@ -44,9 +44,8 @@ before implementation. This keeps architectural direction coherent.
 
 ## Development setup
 
-Unlike end users (who download a released `labctl` binary — see the
-[README Quickstart](README.md#quickstart)), contributors **build `labctl` from
-source** so they can test their changes. You need **Go 1.25+** and **Node 22+**.
+Unlike end users (who run `install.sh` — see the [README](README.md#install)),
+contributors **build `labctl` from source** so they can test their changes. You need **Go 1.25+** and **Node 22+**.
 The steps are identical on macOS, Linux, and Windows/WSL2 — on Windows run them
 inside your WSL2 distro, never native PowerShell.
 
@@ -67,6 +66,62 @@ make lint          # gofmt, golangci-lint, gosec, govulncheck, shellcheck,
 bin/labctl init                    # setup-tools + create cluster + install platform
 bin/labctl scenario up observability-sre
 ```
+
+Other targets:
+
+```bash
+make cli-install   # build and copy labctl into $(go env GOPATH)/bin
+make ui-dev        # serve src/ui/dist live without rebuilding Go (LABCTL_UI_DIR)
+make docs-check    # the docs agree with the code and the website's manifest
+make fmt           # gofmt the tree
+```
+
+Inside a checkout, `labctl` uses the checkout's content (it walks up from the
+working directory to the directory with `scenarios/` and `runtimes/`), so your
+edits take effect without reinstalling; outside it, it uses the installed lab in
+`~/.snowops/lab`.
+
+### Repository layout
+
+```
+# User-facing content at the root — what a release ships under content/
+scenarios/ incidents/     declarative content
+learn/ challenges/
+platform/<cat>/<prov>/    install.sh / uninstall.sh / status.sh / values.yaml
+runtimes/<profile>/       k3d | kind | incluster (+ runtimes/_lib shared helpers)
+apps/<name>/              sample workloads
+bootstrap/                tool installation
+config/                   versions.env, footprints.yaml, .env.example
+docs/                     PRODUCT, ROADMAP, TESTING, architecture/, adr/, runbooks/
+install.sh                the end-user installer
+scripts/                  release staging, footprint measurement, docs checks
+
+# The labctl Go module — self-contained under src/
+src/cmd/labctl/           entrypoint
+src/internal/             implementation (cli, httpapi, service, run, store, …)
+src/pkg/                  public SDK: checks, scenario types, extension seam
+src/ui/                   React SPA, embedded into the binary
+src/engine/ src/services/ app build/deploy scripts and shared services (shipped)
+src/test/shell/           bats suites with kubectl/helm stubbed
+```
+
+### Scenario and fault footprints
+
+`config/footprints.yaml` holds the measured memory of the baseline lab, each
+Helm release scenarios install, platform components and apps; a scenario's own
+extra goes in its `requirements.memory`. The capacity check that decides
+whether a scenario fits is built on them, so re-measure when you add or change
+a scenario:
+
+```bash
+labctl init                               # a fresh lab, nothing active
+scripts/measure-footprints.sh <scenario>  # prints what the scenario adds
+```
+
+### Releasing
+
+A release ships the binary and the content together; see
+[RELEASING.md](RELEASING.md).
 
 New to the repo? Work through
 [R00 — Environment & Build](docs/runbooks/R00-environment-and-build.md) once; it
@@ -112,10 +167,8 @@ is written for AI agents, but it is the fastest orientation for a human too.
    update the runbook, and write an ADR if you made a notable decision.
    Documentation is the source of truth here — the code is expected to match it,
    and `make docs-check` gates the links and the pages the website publishes.
-8. **Comments say what the code does and why it is needed, briefly.** Three
-   lines is a lot. Never the story behind a change (the bug that prompted it,
-   the decision, measurements, task or ticket numbers) — that history belongs
-   in git and in ADRs.
+8. **Comments follow the comment rule in [CLAUDE.md](CLAUDE.md#hard-rules)**:
+   what the code does and why it is needed, never the story behind a change.
 
 Changing Go code? [docs/GO-CONVENTIONS.md](docs/GO-CONVENTIONS.md) covers the
 everyday choices: which layer owns the code, how to handle contexts and errors,

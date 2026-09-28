@@ -106,6 +106,15 @@ Every script test asserts at minimum:
 - **Visual:** Playwright screenshot snapshots on the design-system page, both
   themes, to catch unintended regressions.
 
+## The onboarding job
+
+`.github/workflows/onboarding.yaml` runs the new-user path on a fresh Ubuntu
+runner, on every PR that touches it and nightly: it builds a release snapshot
+with goreleaser, installs it with `install.sh`, and runs `labctl doctor`,
+`labctl init` and a scenario from the home directory, outside any checkout.
+macOS and WSL2 cannot run there, so
+[R14](runbooks/R14-fresh-machine-onboarding.md) covers them by hand.
+
 ## The nightly real-cluster e2e
 
 Layers 1–4 are hermetic and run on every PR in minutes. Reality is checked once
