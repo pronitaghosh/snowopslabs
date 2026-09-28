@@ -240,13 +240,19 @@ recovery:
 
 1. If the cluster is not healthy (API not answering, a node container with no
    k3s, or a node not Ready), it restarts the cluster **in order** with
-   `k3d cluster stop` + `k3d cluster start --wait`: servers first, then agents.
-2. It then requires every node to run k3s and be Ready for six samples in a row,
-   10 s apart — a node can die a minute after starting while its Node still
-   reads Ready from before.
-3. A node that is not healthy is restarted; one whose container IP differs from
-   its Node's `InternalIP` has its Node object deleted first, so it registers
-   again at its current address (same name, so PVs pinned to it stay valid).
+   `k3d cluster stop` + `k3d cluster start`: servers first, then agents.
+2. While k3d starts it, the script compares each node container's IP with its
+   Node's recorded `InternalIP`, running `kubectl` inside the server so it needs
+   neither the load balancer nor the host kubeconfig. A stale record is
+   corrected in place (a status patch; same Node, same name, same pods). This
+   covers the server too: with a stale address the server's k3s shuts down
+   every few seconds, so its API answers only in brief windows, and the check
+   repeats until one pass finds every record right.
+3. It then requires every node to run k3s and be Ready. Just after node
+   containers (re)start it takes six samples in a row, 10 s apart, since a node
+   can die a minute in while its Node still reads Ready; a lab that has been up
+   for a while needs one look. A node that is still unhealthy has its address
+   checked again and is restarted, at most twice.
 4. It **never deletes the cluster**. If it still cannot be brought back it stops
    and points at `labctl reset`, which rebuilds from scratch on purpose.
 

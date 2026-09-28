@@ -28,7 +28,7 @@ page collects them by symptom. `labctl doctor` checks your machine, and
 | Symptom | Cause and fix |
 |---|---|
 | The dashboard or `labctl status` says the cluster is **unreachable** | Docker or colima is stopped, usually after a reboot, or out of memory. Run `labctl init`; it keeps your apps and scenarios. |
-| A node stays `NotReady` after a restart | `labctl init` restarts the cluster in order and re-registers a node whose address changed. If it still fails, `labctl reset` rebuilds the lab from scratch. |
+| A node stays `NotReady` after a restart | `labctl init` restarts the cluster and corrects the address Kubernetes records for any node whose container came back with a different IP (the server included), keeping its pods. If it still fails, `labctl reset` rebuilds the lab from scratch. |
 | `Not enough memory for <scenario>` | Run the commands it prints: `labctl scenario down` for a scenario, `labctl platform down` for components only it used or nothing uses. Or resize Docker as printed. [Resources](resources.md) lists what each scenario needs. |
 | `<scenario> needs 2 agent nodes` on kind | kind cannot add nodes to a running cluster. Set `AGENTS=2` in `.env` and `labctl reset`. |
 | `<scenario> must run on its own` | Bring down the other active scenarios first. |

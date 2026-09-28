@@ -11,6 +11,8 @@ setup() {
   stub_setup
   stub_command k3d kind kubectl docker
   ROOT="$(project_root)"
+  # The stubs answer at once, so nothing needs up.sh's real-world waits.
+  export REACHABLE_WAIT=0
 }
 
 teardown() {
@@ -56,7 +58,7 @@ docker_recovers_after_restart() {
   # in order and, if it still does not answer, stops and leaves rebuilding to
   # the user.
   stub_when kubectl "get --raw" 1 # /healthz probe fails
-  REACHABLE_WAIT=0 run bash "$ROOT/runtimes/k3d/up.sh" testcluster
+  run bash "$ROOT/runtimes/k3d/up.sh" testcluster
   [ "$status" -eq 1 ]
   [[ "$output" == *"labctl reset"* ]]
   # It tries the ordered restart k3d provides (servers, then agents) first.
@@ -112,19 +114,49 @@ docker_recovers_after_restart() {
   refute_called k3d "cluster delete"
 }
 
-@test "k3d up re-registers a node whose container moved to another IP" {
+@test "k3d up corrects the recorded address of a node whose container moved" {
   # The Node records the address the container had before the restart; k3s
-  # reads that one and shuts down on every restart until the Node is replaced.
+  # reads that one and shuts down on every start until the record is fixed.
   stub_when docker "label=k3d.cluster" 0 "k3d-testcluster-agent-0"
   stub_when docker "k3d.role" 0 "agent"
   stub_when docker "range .NetworkSettings.Networks" 0 "172.18.0.5"
-  stub_when kubectl "InternalIP" 0 "172.18.0.2"
+  stub_when docker "InternalIP" 0 "172.18.0.2"
   docker_recovers_after_restart
   NODE_CHECK_INTERVAL=0 NODE_STABLE_CHECKS=1 run bash "$ROOT/runtimes/k3d/up.sh" testcluster
   [ "$status" -eq 0 ]
-  assert_called kubectl "delete node k3d-testcluster-agent-0"
-  assert_called docker "restart k3d-testcluster-agent-0"
+  assert_called docker "exec k3d-testcluster-server-0 kubectl --request-timeout=5s patch node k3d-testcluster-agent-0 --subresource=status"
+  assert_called docker "172.18.0.5"
+  refute_called kubectl "delete node"
   refute_called k3d "cluster delete"
+}
+
+@test "k3d up recovers a server whose address moved" {
+  # A server with a stale recorded address shuts k3s down every few seconds,
+  # and k3d's start waits on it, so its record is corrected from inside the
+  # server while the start runs.
+  stub_when docker "label=k3d.cluster" 0 "k3d-testcluster-server-0"
+  stub_when docker "k3d.role" 0 "server"
+  stub_when docker "range .NetworkSettings.Networks" 0 "172.18.0.3"
+  stub_when docker "InternalIP" 0 "172.18.0.2"
+  docker_recovers_after_restart
+  NODE_CHECK_INTERVAL=0 NODE_STABLE_CHECKS=1 run bash "$ROOT/runtimes/k3d/up.sh" testcluster
+  [ "$status" -eq 0 ]
+  assert_called k3d "cluster start testcluster --timeout"
+  assert_called docker "exec k3d-testcluster-server-0 kubectl --request-timeout=5s patch node k3d-testcluster-server-0 --subresource=status"
+  assert_called kubectl "annotate node k3d-testcluster-server-0 --overwrite snowops.dev/address-corrected="
+  refute_called k3d "cluster delete"
+  refute_called k3d "cluster create"
+}
+
+@test "k3d up watches a just-started lab over several samples" {
+  stub_when docker "label=k3d.cluster" 0 "k3d-testcluster-agent-0"
+  stub_when docker "k3d.role" 0 "agent"
+  stub_when docker "top" 0 "root 1 /bin/k3s agent"
+  stub_when docker "{{.Status}}" 0 "Up 40 seconds"
+  NODE_STABLE_CHECKS=3 NODE_CHECK_INTERVAL=0 run bash "$ROOT/runtimes/k3d/up.sh" testcluster
+  [ "$status" -eq 0 ]
+  # lab_healthy looks once, then three stability samples.
+  assert_call_count kubectl 4 "wait --for=condition=Ready node"
 }
 
 @test "k3d up leaves a node alone when k3s is running inside it" {
@@ -155,7 +187,7 @@ docker_recovers_after_restart() {
 @test "kind up never deletes an existing cluster whose API does not answer" {
   stub_stdout kind "testcluster" # `get clusters` lists it
   stub_when kubectl "get --raw" 1 # /healthz probe fails
-  REACHABLE_WAIT=0 run bash "$ROOT/runtimes/kind/up.sh" testcluster
+  run bash "$ROOT/runtimes/kind/up.sh" testcluster
   [ "$status" -eq 1 ]
   [[ "$output" == *"labctl reset"* ]]
   refute_called kind "delete cluster"
