@@ -105,7 +105,7 @@ main() {
   mkdir -p "$tmp/x"
   tar -xzf "$tmp/$archive" -C "$tmp/x"
   [ -f "$tmp/x/labctl" ] || fail "$archive has no labctl binary"
-  [ -d "$tmp/x/content" ] || fail "$archive has no lab content; install $version or later"
+  [ -d "$tmp/x/content" ] || fail "$archive predates bundled lab content; install a newer release"
 
   mkdir -p "$BIN_DIR"
   # mv replaces the file rather than rewriting it in place, which macOS would
