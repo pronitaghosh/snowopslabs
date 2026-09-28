@@ -29,7 +29,7 @@ kubectl rollout status deployment/argocd-server -n $NAMESPACE --timeout=30s || t
 
 echo ""
 echo "ArgoCD Access:"
-echo "  - External: http://argocd.${INGRESS_URL_SUFFIX:-${DOMAIN_SUFFIX:-k3d.local}}"
+echo "  - External: http://argocd.${INGRESS_URL_SUFFIX:-${DOMAIN_SUFFIX:-${CLUSTER_NAME:-snowops}.localhost}}"
 echo "  - Internal: http://argocd-server.$NAMESPACE.svc.cluster.local:80"
 echo ""
 echo "Retrieve initial admin password:"

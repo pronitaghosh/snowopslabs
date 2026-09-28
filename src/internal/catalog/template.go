@@ -18,8 +18,8 @@ type TemplateContext = tmpl.Context
 // reference known keys (values need not be the deployment's real ones).
 func DefaultTemplateContext(projectRoot string) TemplateContext {
 	return TemplateContext{
-		DomainSuffix:        "k3d.local",
-		IngressURLSuffix:    "k3d.local",
+		DomainSuffix:        "snowops.localhost",
+		IngressURLSuffix:    "snowops.localhost",
 		MonitoringNamespace: "monitoring",
 		ProjectRoot:         projectRoot,
 		StateDir:            filepath.Join(projectRoot, ".labctl"),

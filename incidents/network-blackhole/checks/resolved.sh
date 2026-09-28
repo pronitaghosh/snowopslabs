@@ -13,7 +13,7 @@ set -euo pipefail
 
 NS="${TARGET_NAMESPACE:-go-api}"
 DEPLOY="${TARGET_WORKLOAD:-go-api}"
-SUFFIX="${DOMAIN_SUFFIX:-k3d.local}"
+SUFFIX="${DOMAIN_SUFFIX:-${CLUSTER_NAME:-snowops}.localhost}"
 
 # Look for the fault's OWN policy, by its label, rather than for any deny-all.
 # A namespace-wide deny baseline with targeted allows beside it is the pattern

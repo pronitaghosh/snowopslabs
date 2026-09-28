@@ -2,7 +2,7 @@
 set -euo pipefail
 
 NAMESPACE="vault"
-DOMAIN_SUFFIX="${DOMAIN_SUFFIX:-k3d.local}"
+DOMAIN_SUFFIX="${DOMAIN_SUFFIX:-${CLUSTER_NAME:-snowops}.localhost}"
 
 echo "=== HashiCorp Vault Status ==="
 echo ""

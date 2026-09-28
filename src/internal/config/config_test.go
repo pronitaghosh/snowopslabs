@@ -277,8 +277,8 @@ func TestLoad_Defaults(t *testing.T) {
 	if cfg.ClusterName != "snowops" {
 		t.Errorf("ClusterName: got %q, want %q", cfg.ClusterName, "snowops")
 	}
-	if cfg.DomainSuffix != "k3d.local" {
-		t.Errorf("DomainSuffix: got %q, want %q", cfg.DomainSuffix, "k3d.local")
+	if cfg.DomainSuffix != "snowops.localhost" {
+		t.Errorf("DomainSuffix: got %q, want %q", cfg.DomainSuffix, "snowops.localhost")
 	}
 	if cfg.MonitoringNamespace != "monitoring" {
 		t.Errorf("MonitoringNamespace: got %q, want %q", cfg.MonitoringNamespace, "monitoring")
@@ -485,7 +485,7 @@ func TestRecordedPortsFollowTheCluster(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if got := cfg.IngressURL("grafana"); got != "http://grafana.k3d.local" {
+		if got := cfg.IngressURL("grafana"); got != "http://grafana.lab.localhost" {
 			t.Errorf("IngressURL = %q", got)
 		}
 	})
@@ -506,14 +506,31 @@ func TestRecordedPortsFollowTheCluster(t *testing.T) {
 		if cfg.HTTPPort != "8080" || cfg.HTTPSPort != "8443" {
 			t.Errorf("ports = %s/%s, want 8080/8443", cfg.HTTPPort, cfg.HTTPSPort)
 		}
-		if got := cfg.IngressURLSuffix(); got != "k3d.local:8080" {
+		if got := cfg.IngressURLSuffix(); got != "lab.localhost:8080" {
 			t.Errorf("IngressURLSuffix = %q", got)
 		}
-		if got := cfg.IngressURL("grafana"); got != "http://grafana.k3d.local:8080" {
+		if got := cfg.IngressURL("grafana"); got != "http://grafana.lab.localhost:8080" {
 			t.Errorf("IngressURL = %q", got)
 		}
 		if cfg.ScriptEnv["HTTP_PORT"] != "8080" {
 			t.Errorf("scripts must see the recorded port, got %q", cfg.ScriptEnv["HTTP_PORT"])
+		}
+	})
+
+	t.Run("a lab keeps the suffix it was built with", func(t *testing.T) {
+		old := "HTTP_PORT=8080\nHTTPS_PORT=8443\nDOMAIN_SUFFIX=k3d.local\n"
+		if err := os.WriteFile(filepath.Join(home, "clusters", "lab.env"), []byte(old), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		cfg, err := Load(root)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := cfg.IngressURL("grafana"); got != "http://grafana.k3d.local:8080" {
+			t.Errorf("IngressURL = %q", got)
+		}
+		if cfg.ScriptEnv["DOMAIN_SUFFIX"] != "k3d.local" {
+			t.Errorf("scripts must see the recorded suffix, got %q", cfg.ScriptEnv["DOMAIN_SUFFIX"])
 		}
 	})
 
@@ -572,6 +589,26 @@ func makeLab(t *testing.T) string {
 		}
 	}
 	return dir
+}
+
+func TestConfig_ResolvesLocally(t *testing.T) {
+	tests := []struct {
+		name     string
+		suffix   string
+		expected bool
+	}{
+		{name: "per-cluster localhost", suffix: "snowops.localhost", expected: true},
+		{name: "bare localhost", suffix: "localhost", expected: true},
+		{name: "a .local suffix", suffix: "k3d.local", expected: false},
+		{name: "a name that only contains localhost", suffix: "mylocalhost", expected: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := (&Config{DomainSuffix: tt.suffix}).ResolvesLocally(); got != tt.expected {
+				t.Errorf("ResolvesLocally(%q) = %v, want %v", tt.suffix, got, tt.expected)
+			}
+		})
+	}
 }
 
 func TestFindProjectRoot(t *testing.T) {

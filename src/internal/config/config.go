@@ -136,14 +136,16 @@ func Load(projectRoot string) (*Config, error) {
 	}
 	cfg.StateDir = stateDir
 
-	// The runtime records the ingress ports it bound, which differ from the
-	// configured ones when those are busy. The record overrides .env; only a
-	// real environment variable overrides the record.
+	// The runtime records how this machine reaches the cluster's ingress: the
+	// ports it bound, which differ from the configured ones when those are
+	// busy, and the domain suffix its hostnames use, which a lab keeps for its
+	// lifetime. The record overrides .env; only a real environment variable
+	// overrides the record.
 	clusterVals := map[string]string{}
 	if path, err := ClusterStateFile(cfg.ClusterName); err == nil {
 		mergeEnvFile(clusterVals, path)
 	}
-	for _, k := range []string{"HTTP_PORT", "HTTPS_PORT"} {
+	for _, k := range []string{"HTTP_PORT", "HTTPS_PORT", "DOMAIN_SUFFIX"} {
 		if v := clusterVals[k]; v != "" {
 			fileVals[k] = v
 		}
@@ -156,7 +158,9 @@ func Load(projectRoot string) (*Config, error) {
 
 	cfg.IngressClass = resolveEnv(fileVals, "INGRESS_CLASS", "traefik")
 	cfg.StorageClass = resolveEnv(fileVals, "STORAGE_CLASS", "local-path")
-	cfg.DomainSuffix = resolveEnv(fileVals, "DOMAIN_SUFFIX", "k3d.local")
+	// Every browser resolves *.localhost to this machine, and the cluster name
+	// keeps two labs' hostnames (and so their cookies) apart.
+	cfg.DomainSuffix = resolveEnv(fileVals, "DOMAIN_SUFFIX", cfg.ClusterName+".localhost")
 	cfg.RegistryType = resolveEnv(fileVals, "REGISTRY_TYPE", "k3d-import")
 	cfg.MonitoringNamespace = resolveEnv(fileVals, "MONITORING_NAMESPACE", "monitoring")
 
@@ -470,12 +474,18 @@ func ClusterStateFile(clusterName string) (string, error) {
 	return filepath.Join(home, "clusters", clusterName+".env"), nil
 }
 
+// ResolvesLocally reports whether lab hostnames resolve to this machine without
+// hosts-file entries: every browser and resolver maps *.localhost to loopback.
+func (c *Config) ResolvesLocally() bool {
+	return c.DomainSuffix == "localhost" || strings.HasSuffix(c.DomainSuffix, ".localhost")
+}
+
 // LocalIngress reports whether lab hostnames are served on this machine's
 // loopback (k3d, kind) rather than by a real ingress (incluster).
 func (c *Config) LocalIngress() bool { return c.Profile != "incluster" }
 
 // IngressURLSuffix is what follows "<name>." in a lab URL: the domain suffix,
-// plus the ingress port when it is not 80 (e.g. "k3d.local:8080").
+// plus the ingress port when it is not 80 (e.g. "snowops.localhost:8080").
 func (c *Config) IngressURLSuffix() string {
 	if c.HTTPPort == "" || c.HTTPPort == "80" {
 		return c.DomainSuffix
@@ -484,7 +494,7 @@ func (c *Config) IngressURLSuffix() string {
 }
 
 // IngressURL is the browser URL for a lab hostname, e.g. "grafana" →
-// "http://grafana.k3d.local" or "http://grafana.k3d.local:8080".
+// "http://grafana.snowops.localhost" or "http://grafana.snowops.localhost:8080".
 func (c *Config) IngressURL(name string) string {
 	return "http://" + name + "." + c.IngressURLSuffix()
 }

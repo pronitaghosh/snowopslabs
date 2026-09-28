@@ -31,11 +31,15 @@ scenarios, and incidents into structured modules with verifiable completion chec
 
 func learnEngine() *learn.Engine {
 	root := cfg.ProjectRoot
-	return learn.New(
+	eng := learn.New(
 		filepath.Join(root, "learn"),
 		filepath.Join(cfg.StateDir, "learn"),
 		filepath.Join(cfg.StateDir, "history"),
 	)
+	if incEng != nil {
+		eng.Expand = incEng.ResolveTemplate
+	}
+	return eng
 }
 
 func learnListCmd() *cobra.Command {
@@ -138,7 +142,7 @@ After completing the task, run this again to verify the check and advance.`,
 			}
 
 			fmt.Fprintf(out, "Verifying check %q...\n", m.Check.Name)
-			c := checksCheck(m.Check, p.Dir(), cfg.DomainSuffix)
+			c := checksCheck(m.Check, p.Dir(), learnResolver())
 			runner := labcheck.NewRunner(cfg, scenes.Workload, cfg.ProjectRoot)
 			res := runner.Run(cmd.Context(), c)
 			if res.Pass {
@@ -261,8 +265,8 @@ func progressSummary(p *learn.Path, prog *learn.Progress) string {
 
 // expandVars expands ${VAR} and ${VAR:-default} in learning-path check
 // fields, using the configured domain suffix for DOMAIN_SUFFIX and the process
-// environment for everything else. Authors can then write URLs such as
-// http://go-api.${DOMAIN_SUFFIX:-k3d.local}.
+// environment for everything else. Paths written before templates keep
+// working; new ones use {{.IngressURLSuffix}}, which also carries the port.
 func expandVars(s, domainSuffix string) string {
 	return os.Expand(s, func(name string) string {
 		key, def := name, ""
@@ -282,8 +286,22 @@ func expandVars(s, domainSuffix string) string {
 	})
 }
 
-// checksCheck converts a learn.Check to a checks.Check for the runner.
-func checksCheck(c learn.Check, pathDir, domainSuffix string) checks.Check {
+// learnResolver resolves a learning-path check field: ${VAR} as expandVars
+// does, then template variables such as {{.IngressURLSuffix}}, which carry the
+// ingress port as well as the domain.
+func learnResolver() func(string) string {
+	return func(s string) string {
+		s = expandVars(s, cfg.DomainSuffix)
+		if incEng != nil {
+			s = incEng.ResolveTemplate(s)
+		}
+		return s
+	}
+}
+
+// checksCheck converts a learn.Check to a checks.Check for the runner,
+// resolving its URL with resolve.
+func checksCheck(c learn.Check, pathDir string, resolve func(string) string) checks.Check {
 	result := checks.Check{
 		Name:           c.Name,
 		Type:           c.Type,
@@ -291,7 +309,7 @@ func checksCheck(c learn.Check, pathDir, domainSuffix string) checks.Check {
 	}
 	switch c.Type {
 	case "http":
-		result.URL = expandVars(c.URL, domainSuffix)
+		result.URL = resolve(c.URL)
 		result.ExpectStatus = c.Status()
 	case "promql":
 		result.Query = c.Query

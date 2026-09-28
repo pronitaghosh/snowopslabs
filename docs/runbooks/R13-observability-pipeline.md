@@ -18,7 +18,7 @@ read.
 - A cluster with the monitoring stack: `make init` then
   `labctl platform up monitoring/metrics monitoring/grafana`.
 - `go-api` deployed: `labctl app deploy go-api`.
-- Hostnames resolvable: `labctl hosts add`.
+- Hostnames resolvable: the default `*.localhost` names need nothing; a lab on another suffix needs `labctl hosts add`.
 
 ---
 
@@ -323,7 +323,7 @@ kubectl -n kafka get podmonitor
 **Expect:** two PodMonitors, `kafka-exporter` and `kafka-broker`.
 
 ```bash
-curl -s 'http://prometheus.k3d.local/api/v1/targets?state=active' \
+curl -s 'http://prometheus.snowops.localhost/api/v1/targets?state=active' \
   | grep -o 'podMonitor/kafka/[a-z-]*' | sort -u
 ```
 

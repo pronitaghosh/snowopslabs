@@ -264,10 +264,10 @@ helm test go-api -n go-api
 
 | Profile | Ingress | Replicas | HPA | Probes | Use Case |
 |---------|---------|----------|-----|--------|----------|
-| `values-dev.yaml` | traefik, `*.k3d.local` | 1 | No | Default | Local development |
-| `values-prod-like.yaml` | traefik, `*.k3d.local` | 3 | Yes (3-10) | Tuned | Production testing |
+| `values-dev.yaml` | traefik, `*.snowops.localhost` | 1 | No | Default | Local development |
+| `values-prod-like.yaml` | traefik, `*.snowops.localhost` | 3 | Yes (3-10) | Tuned | Production testing |
 | `values-cloud.yaml` | nginx, `*.cloud.local` | 2 | Yes (2-10) | Tuned | AKS/EKS deployment |
-| `values-test.yaml` | traefik, `*.k3d.local` | 1 | No | Fast | CI/CD testing |
+| `values-test.yaml` | traefik, `*.snowops.localhost` | 1 | No | Fast | CI/CD testing |
 
 Switch profiles by changing `HELM_VALUES` in `app.env`.
 
@@ -327,7 +327,7 @@ Switch profiles by changing `HELM_VALUES` in `app.env`.
    ```bash
    make build APP_NAME=my-app
    make deploy APP_NAME=my-app
-   curl http://my-app.k3d.local/health
+   curl http://my-app.snowops.localhost/health
    ```
 
 The engine auto-discovers any directory in `apps/` that contains an `app.env` file.

@@ -5,7 +5,7 @@ The commands each phase runs. Set the environment once:
 ```sh
 PATH_NAME=kubernetes-foundations
 CHALLENGE=make-the-slo-green
-DOMAIN_SUFFIX=k3d.local
+DOMAIN_SUFFIX=snowops.localhost
 NOTES=$SCRATCHPAD/review-$PATH_NAME.md        # every command and output lands here
 ```
 

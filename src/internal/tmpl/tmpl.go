@@ -24,11 +24,11 @@ import (
 // Keep the fields flat: Expand only matches a single name, so a nested
 // {{.Workload.Name}} would be left unexpanded.
 type Context struct {
-	// DomainSuffix is the ingress domain suffix, e.g. "k3d.local". Use it for
+	// DomainSuffix is the ingress domain suffix, e.g. "snowops.localhost". Use it for
 	// hostnames (an Ingress host, /etc/hosts); use IngressURLSuffix in URLs.
 	DomainSuffix string
 	// IngressURLSuffix is DomainSuffix plus the ingress port when it is not
-	// 80, e.g. "k3d.local:8080", so "http://grafana.{{.IngressURLSuffix}}"
+	// 80, e.g. "snowops.localhost:8080", so "http://grafana.{{.IngressURLSuffix}}"
 	// works whichever port the ingress listens on.
 	IngressURLSuffix string
 	// MonitoringNamespace is where the monitoring stack lives, e.g. "monitoring".

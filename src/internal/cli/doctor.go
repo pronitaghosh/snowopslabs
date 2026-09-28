@@ -85,8 +85,9 @@ func runDoctor(ctx context.Context, out io.Writer, runner toolchain.Runner) erro
 	if docker.note != "" {
 		notes = append(notes, docker.note)
 	}
-	if !hostsBlockPresent() {
-		notes = append(notes, "Ingress hostnames (e.g. http://grafana.k3d.local) won't resolve until you\n"+
+	suffix, local := labDomain(lab, labErr)
+	if !local && !hostsBlockPresent() {
+		notes = append(notes, "Ingress hostnames (e.g. http://grafana."+suffix+") won't resolve until you\n"+
 			"    run 'labctl hosts add' (one-time, needs sudo). Not needed for the UI at :3939.")
 	}
 
@@ -96,7 +97,7 @@ func runDoctor(ctx context.Context, out io.Writer, runner toolchain.Runner) erro
 		if labErr != nil {
 			dir = workingDir()
 		}
-		printBullets(out, "WSL notes:", "-", wslDoctorNotes(dir))
+		printBullets(out, "WSL notes:", "-", wslDoctorNotes(dir, suffix, local))
 	}
 	if len(problems) > 0 {
 		printBullets(out, "Problems to fix:", "✗", problems)
@@ -137,6 +138,18 @@ func printBullets(out io.Writer, title, bullet string, items []string) {
 	for _, item := range items {
 		fmt.Fprintf(out, "  %s %s\n", bullet, item)
 	}
+}
+
+// labDomain is the domain suffix of the lab's hostnames and whether browsers
+// resolve it without hosts-file entries. Without a readable lab it reports the
+// default, which does.
+func labDomain(lab string, labErr error) (string, bool) {
+	if labErr == nil {
+		if labCfg, err := config.Load(lab); err == nil {
+			return labCfg.DomainSuffix, labCfg.ResolvesLocally()
+		}
+	}
+	return "snowops.localhost", true
 }
 
 // labVersionSuffix formats a lab's LAB_VERSION for the doctor report.

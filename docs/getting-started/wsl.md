@@ -58,11 +58,14 @@ then run `wsl --shutdown` in PowerShell and reopen the terminal.
 - **The dashboard** (`labctl ui`, `http://localhost:3939`) works in your Windows
   browser as is. Install `wslu` (`sudo apt install wslu`) so `labctl ui` can
   open it for you.
-- **Lab hostnames** such as `grafana.k3d.local`: a Windows browser reads the
-  Windows hosts file, not WSL's. Add the lines `labctl hosts add` writes to
-  `C:\Windows\System32\drivers\etc\hosts` (as Administrator). If WSL rewrites
-  its own `/etc/hosts` on restart, set `generateHosts=false` under `[network]`
-  in `/etc/wsl.conf`.
+- **Lab URLs** such as `http://grafana.snowops.localhost` open in your Windows
+  browser as they are. The browser resolves `*.localhost` to Windows' own
+  localhost, and WSL2 forwards Windows' localhost ports into the distro (Docker
+  Desktop publishes them on Windows directly). Nothing goes in a hosts file.
+- A lab built before URLs moved to `*.localhost` keeps its `*.k3d.local` names,
+  which a Windows browser looks up in the Windows hosts file
+  (`C:\Windows\System32\drivers\etc\hosts`), not WSL's. `labctl reset`
+  rebuilds it with `*.localhost` names.
 
 ## After a restart
 

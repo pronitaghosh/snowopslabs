@@ -20,8 +20,8 @@ Build and deploy go-api, then confirm it is reachable through the ingress.
 ```bash
 bin/labctl app build go-api
 bin/labctl app deploy go-api
-curl http://go-api.k3d.local/health
+curl http://go-api.{{.IngressURLSuffix}}/health
 ```
 
-**Completion check:** `GET http://go-api.${DOMAIN_SUFFIX:-k3d.local}/health`
+**Completion check:** `GET http://go-api.{{.IngressURLSuffix}}/health`
 returns HTTP 200.

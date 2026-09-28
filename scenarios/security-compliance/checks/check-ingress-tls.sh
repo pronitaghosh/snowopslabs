@@ -13,7 +13,7 @@ set -euo pipefail
 
 NS="${WORKLOAD_NAMESPACE}"
 INGRESS="${WORKLOAD_NAME}"
-HOST="${WORKLOAD_NAME}.${DOMAIN_SUFFIX:-k3d.local}"
+HOST="${WORKLOAD_NAME}.${DOMAIN_SUFFIX:-${CLUSTER_NAME:-snowops}.localhost}"
 SECRET="${WORKLOAD_NAME}-tls-secret"
 
 if ! kubectl -n "$NS" get ingress "$INGRESS" >/dev/null 2>&1; then

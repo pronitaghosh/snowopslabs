@@ -19,7 +19,7 @@ MONITORING_NS="${MONITORING_NAMESPACE:-monitoring}"
 PROMETHEUS_SVC="${PROMETHEUS_SVC:-http://prometheus-kube-prometheus-prometheus.${MONITORING_NS}.svc:9090}"
 # DOMAIN_SUFFIX is provided by the executor environment (from .env + runtime.env);
 # it drives the OpenCost UI ingress host (opencost.<DOMAIN_SUFFIX>).
-DOMAIN_SUFFIX="${DOMAIN_SUFFIX:-k3d.local}"
+DOMAIN_SUFFIX="${DOMAIN_SUFFIX:-${CLUSTER_NAME:-snowops}.localhost}"
 INGRESS_HOST="opencost.${DOMAIN_SUFFIX}"
 
 echo "Installing OpenCost ${CHART_VERSION} (namespace=${NAMESPACE})..."

@@ -8,7 +8,7 @@ metadata:
 spec:
   ingressClassName: traefik
   rules:
-    - host: prometheus.k3d.local
+    - host: prometheus.snowops.localhost
       http:
         paths:
           - path: /

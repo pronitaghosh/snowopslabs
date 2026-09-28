@@ -36,7 +36,7 @@ ingress:
   ingressAnnotations:
     traefik.ingress.kubernetes.io/router.entrypoints: web
   hosts:
-    - host: go-api.k3d.local
+    - host: go-api.snowops.localhost
       paths:
         - path: /
           pathType: Prefix

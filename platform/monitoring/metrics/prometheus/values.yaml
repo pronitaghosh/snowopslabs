@@ -123,7 +123,7 @@ prometheus:
     annotations:
       traefik.ingress.kubernetes.io/router.entrypoints: web
     hosts:
-      - prometheus.k3d.local
+      - prometheus.snowops.localhost
     paths:
       - /
     pathType: Prefix

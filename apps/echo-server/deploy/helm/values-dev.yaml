@@ -33,7 +33,7 @@ ingress:
   enabled: true
   className: traefik
   hosts:
-    - host: echo-server.k3d.local
+    - host: echo-server.snowops.localhost
       paths:
         - path: /
           pathType: Prefix

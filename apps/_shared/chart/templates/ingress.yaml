@@ -9,7 +9,7 @@ metadata:
 spec:
   ingressClassName: {{ .Values.ingress.className }}
   rules:
-    - host: {{ .Values.ingress.host | default (printf "%s.k3d.local" (include "workload.name" .)) }}
+    - host: {{ .Values.ingress.host | default (printf "%s.snowops.localhost" (include "workload.name" .)) }}
       http:
         paths:
           - path: /

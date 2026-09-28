@@ -74,6 +74,10 @@ modules:
 - `action.type: command` shows the `ref` verbatim for the learner to run.
 - `action.type: scenario` or `incident` points at content by name, which
   `labctl validate` cross-checks — a dangling reference is an error.
+- Lab URLs in a check's `url` and in intro text use
+  `http://<name>.{{.IngressURLSuffix}}`, as scenarios do: it carries the lab's
+  domain and its ingress port, so the check grades this lab and the intro shows
+  the URL the learner can open. Never hardcode a domain.
 - The check must be **provable by the learner's own work**, not by the module
   having been displayed. A check that passes before the learner does anything is
   the most common defect here.

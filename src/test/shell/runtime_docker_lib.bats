@@ -26,7 +26,10 @@ case "$1" in
   port)
     [ -n "${LB_MISSING:-}" ] && { echo "Error: No such container: $2" >&2; exit 1; }
     case "$3" in
-      80/tcp) printf '0.0.0.0:%s\n[::]:%s\n' "${LB_HTTP:-80}" "${LB_HTTP:-80}" ;;
+      80/tcp)
+        printf '0.0.0.0:%s\n[::]:%s\n' "${LB_HTTP:-80}" "${LB_HTTP:-80}"
+        [ -n "${LB_HTTP2:-}" ] && printf '0.0.0.0:%s\n' "$LB_HTTP2"
+        ;;
       443/tcp) printf '0.0.0.0:%s\n' "${LB_HTTPS:-443}" ;;
     esac ;;
   pull)
@@ -49,7 +52,20 @@ EOF
 #!/usr/bin/env bash
 echo "${FAKE_UNAME:-Darwin}"
 EOF
-  chmod +x "$STUB_BIN/docker" "$STUB_BIN/colima" "$STUB_BIN/uname"
+  # kubectl lists the cluster's ingress hosts from $INGRESS_HOSTS.
+  cat >"$STUB_BIN/kubectl" <<'EOF'
+#!/usr/bin/env bash
+[ -n "${INGRESS_HOSTS:-}" ] && printf '%s\n' $INGRESS_HOSTS
+exit 0
+EOF
+  cat >"$STUB_BIN/k3d" <<'EOF'
+#!/usr/bin/env bash
+echo "k3d $*" >>"$STATE/calls"
+if [ "$1 $2" = "cluster list" ]; then
+  [ "${K3D_HAS:-}" = "$3" ]
+fi
+EOF
+  chmod +x "$STUB_BIN/docker" "$STUB_BIN/colima" "$STUB_BIN/uname" "$STUB_BIN/kubectl" "$STUB_BIN/k3d"
 }
 
 teardown() {
@@ -130,7 +146,43 @@ lib() {
   export SNOWOPS_HOME="$STUB_DIR/snowops"
   LB_HTTP=8080 LB_HTTPS=8443 run lib record_ingress_ports lab k3d-lab-serverlb
   [ "$status" -eq 0 ]
-  [ "$(cat "$SNOWOPS_HOME/clusters/lab.env")" = "$(printf 'HTTP_PORT=8080\nHTTPS_PORT=8443')" ]
+  [ "$(cat "$SNOWOPS_HOME/clusters/lab.env")" = "$(printf 'HTTP_PORT=8080\nHTTPS_PORT=8443\nDOMAIN_SUFFIX=lab.localhost')" ]
+}
+
+@test "a lab built before its suffix was recorded keeps the hostnames it has" {
+  export SNOWOPS_HOME="$STUB_DIR/snowops"
+  INGRESS_HOSTS="argocd.k3d.local grafana.k3d.local" run lib record_ingress_ports lab k3d-lab-serverlb
+  [ "$status" -eq 0 ]
+  grep -qx "DOMAIN_SUFFIX=k3d.local" "$SNOWOPS_HOME/clusters/lab.env"
+}
+
+@test "a recorded suffix and a moved port are kept while the port is still mapped" {
+  export SNOWOPS_HOME="$STUB_DIR/snowops"
+  mkdir -p "$SNOWOPS_HOME/clusters"
+  printf 'HTTP_PORT=8080\nHTTPS_PORT=8443\nDOMAIN_SUFFIX=k3d.local\n' >"$SNOWOPS_HOME/clusters/lab.env"
+  LB_HTTP=80 LB_HTTP2=8080 DOMAIN_SUFFIX=lab.localhost run lib record_ingress_ports lab k3d-lab-serverlb
+  [ "$status" -eq 0 ]
+  grep -qx "HTTP_PORT=8080" "$SNOWOPS_HOME/clusters/lab.env"
+  grep -qx "DOMAIN_SUFFIX=k3d.local" "$SNOWOPS_HOME/clusters/lab.env"
+}
+
+@test "a cluster name another runtime uses is reported" {
+  K3D_HAS=lab run lib name_used_by k3d lab
+  [ "$status" -eq 0 ]
+  K3D_HAS=other run lib name_used_by k3d lab
+  [ "$status" -ne 0 ]
+}
+
+@test "move-ingress adds free ports to the load balancer and records them" {
+  export SNOWOPS_HOME="$STUB_DIR/snowops"
+  mkdir -p "$SNOWOPS_HOME/clusters"
+  printf 'HTTP_PORT=80\nHTTPS_PORT=443\nDOMAIN_SUFFIX=k3d.local\n' >"$SNOWOPS_HOME/clusters/lab.env"
+  run bash "$ROOT/runtimes/k3d/move-ingress.sh" lab
+  [ "$status" -eq 0 ]
+  added="$(sed -n 's/.*cluster edit lab --port-add \([0-9]*\):80@loadbalancer.*/\1/p' "$STATE/calls")"
+  [ -n "$added" ]
+  grep -qx "HTTP_PORT=$added" "$SNOWOPS_HOME/clusters/lab.env"
+  grep -qx "DOMAIN_SUFFIX=k3d.local" "$SNOWOPS_HOME/clusters/lab.env"
 }
 
 @test "forgetting a cluster removes its record" {

@@ -27,6 +27,7 @@ Each profile is a directory `runtimes/<name>/` containing exactly:
 | `runtime.env` | yes | Profile-specific defaults, `KEY=value` lines, read by `labctl` and the platform scripts. |
 | `add-agents.sh` | no | Grow the running cluster to `<total>` agent nodes, ready to run the lab's app images. labctl calls it when a scenario's `requirements.agents` exceeds the cluster's agents. Only k3d has one; without it such a scenario asks for `AGENTS=<n>` and `labctl reset`. |
 | `remove-agents.sh` | no | Shrink the running cluster towards `<total>` agent nodes, removing only the agents `add-agents.sh` created. A node holding a local volume, or whose pods cannot be drained, stays. labctl calls it after `scenario down`, with the most agents any active scenario still needs and never fewer than `AGENTS`. |
+| `move-ingress.sh` | no | Add free host ports to the running cluster's ingress and record them in `~/.snowops/clusters/<name>.env`. `labctl init` calls it when the lab's Grafana does not answer through the recorded port from this machine. Only k3d has one (`k3d cluster edit --port-add`); kind cannot add ports to a running cluster. |
 
 `internal/runtime` discovers a profile by the presence of `up.sh`; a directory
 without it is not a runtime. `up.sh`/`down.sh` are run through the executor from
@@ -61,7 +62,7 @@ Every profile defines the same keys so downstream scripts can rely on them:
 |---|---|---|---|---|
 | `INGRESS_CLASS` | `traefik` | `nginx` | `traefik` | Ingress controller the platform installs and routes through. |
 | `STORAGE_CLASS` | `local-path` | `standard` | `standard` | Default `StorageClass` for PVCs. |
-| `DOMAIN_SUFFIX` | `k3d.local` | `kind.local` | `cluster.local` | Host suffix for ingress routes; content templates read `{{.DomainSuffix}}` for hostnames and `{{.IngressURLSuffix}}` (suffix plus a non-default port) for URLs. |
+| `DOMAIN_SUFFIX` | `snowops.localhost` | `kind.local` | `cluster.local` | Host suffix for ingress routes; content templates read `{{.DomainSuffix}}` for hostnames and `{{.IngressURLSuffix}}` (suffix plus a non-default port) for URLs. |
 | `REGISTRY_TYPE` | `k3d-import` | `kind-load` | `none` | How locally-built app images reach the cluster. |
 
 A new profile is added by creating `runtimes/<name>/` with these three files and

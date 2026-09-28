@@ -1,5 +1,5 @@
 # Self-signed ClusterIssuer for local development
-# Used to generate TLS certificates for *.k3d.local
+# Used to generate TLS certificates for *.snowops.localhost
 ---
 apiVersion: cert-manager.io/v1
 kind: ClusterIssuer

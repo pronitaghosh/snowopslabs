@@ -7,7 +7,7 @@ VALUES_FILE="$(mktemp "${TMPDIR:-/tmp}/grafana-values.XXXXXX")"
 trap 'rm -f "$VALUES_FILE"' EXIT
 
 # DOMAIN_SUFFIX is provided by the executor environment (from .env + runtime.env).
-DOMAIN_SUFFIX="${DOMAIN_SUFFIX:-k3d.local}"
+DOMAIN_SUFFIX="${DOMAIN_SUFFIX:-${CLUSTER_NAME:-snowops}.localhost}"
 GRAFANA_CHARTS_REPO="${GRAFANA_CHARTS_REPO:-https://grafana-community.github.io/helm-charts}"
 GRAFANA_CHART_VERSION="${GRAFANA_CHART_VERSION:-13.2.0}"
 
@@ -52,6 +52,6 @@ kubectl rollout status deployment/grafana -n "$NAMESPACE" --timeout=120s || true
 
 echo "Grafana installed successfully"
 echo ""
-echo "Access Grafana at: http://grafana.${INGRESS_URL_SUFFIX:-${DOMAIN_SUFFIX:-k3d.local}}"
+echo "Access Grafana at: http://grafana.${INGRESS_URL_SUFFIX:-${DOMAIN_SUFFIX:-${CLUSTER_NAME:-snowops}.localhost}}"
 echo "Default credentials: admin / $GRAFANA_ADMIN_PASSWORD"
 echo "Namespace: $NAMESPACE"

@@ -5,7 +5,7 @@ The commands each phase runs. Set the environment once:
 ```sh
 FAULT=service-selector-broken
 NS=go-api                                     # fault.yaml target.namespace
-DOMAIN_SUFFIX=k3d.local
+DOMAIN_SUFFIX=snowops.localhost
 PROM=http://prometheus.$DOMAIN_SUFFIX
 ALERTMANAGER_URL=http://alertmanager.$DOMAIN_SUFFIX
 NOTES=$SCRATCHPAD/review-$FAULT.md            # every command and output lands here

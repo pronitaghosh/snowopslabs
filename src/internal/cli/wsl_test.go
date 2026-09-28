@@ -98,19 +98,26 @@ func TestBrowserCommands(t *testing.T) {
 }
 
 func TestWSLDoctorNotes(t *testing.T) {
-	notes := wslDoctorNotes("/home/me/snowopslabs")
-	if len(notes) == 0 {
-		t.Fatal("expected WSL doctor notes")
+	tests := []struct {
+		name            string
+		suffix          string
+		resolvesLocally bool
+		want            string
+		notWant         string
+	}{
+		{name: "localhost needs no hosts file", suffix: "snowops.localhost", resolvesLocally: true, want: "No hosts-file edits are needed", notWant: `drivers\etc\hosts`},
+		{name: "another suffix needs the windows hosts file", suffix: "k3d.local", want: `drivers\etc\hosts`, notWant: "No hosts-file edits"},
 	}
-	// The note about the Windows hosts file must be present.
-	found := false
-	for _, n := range notes {
-		if strings.Contains(n, `drivers\etc\hosts`) {
-			found = true
-		}
-	}
-	if !found {
-		t.Fatalf("WSL notes should mention the Windows hosts file, got %v", notes)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			notes := strings.Join(wslDoctorNotes("/home/me/snowopslabs", tt.suffix, tt.resolvesLocally), "\n")
+			if !strings.Contains(notes, tt.want) || strings.Contains(notes, tt.notWant) {
+				t.Errorf("notes should mention %q and not %q:\n%s", tt.want, tt.notWant, notes)
+			}
+			if !strings.Contains(notes, "grafana."+tt.suffix) {
+				t.Errorf("notes should show the lab's own hostname:\n%s", notes)
+			}
+		})
 	}
 }
 
@@ -123,10 +130,10 @@ func TestWSLDoctorNotesWarnOnWindowsDrive(t *testing.T) {
 		}
 		return false
 	}
-	if !has(wslDoctorNotes("/mnt/c/Users/me/snowopslabs")) {
+	if !has(wslDoctorNotes("/mnt/c/Users/me/snowopslabs", "snowops.localhost", true)) {
 		t.Error("a lab under /mnt/c should be warned about")
 	}
-	if has(wslDoctorNotes("/home/me/snowopslabs")) {
+	if has(wslDoctorNotes("/home/me/snowopslabs", "snowops.localhost", true)) {
 		t.Error("a lab on the Linux filesystem should not be warned about")
 	}
 }

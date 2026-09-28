@@ -71,13 +71,13 @@ See [monitoring/README.md](monitoring/README.md) for detailed setup and verifica
 |----------|-------|-------------|
 | **grafana** | `grafana/grafana` | Auto-provisioned Prometheus datasource, dashboard sidecar, 5Gi PVC |
 
-Access: `http://grafana.k3d.local` (admin/admin)
+Access: `http://grafana.snowops.localhost` (admin/admin)
 
 ### GitOps (`gitops/`)
 
 | Provider | Chart | Description |
 |----------|-------|-------------|
-| **argocd** | `argo/argo-cd` | GitOps continuous delivery. Traefik ingress at `argocd.k3d.local` |
+| **argocd** | `argo/argo-cd` | GitOps continuous delivery. Traefik ingress at `argocd.snowops.localhost` |
 
 Activated via the `gitops-cicd` scenario or manually.
 

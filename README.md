@@ -206,12 +206,11 @@ git switch -c my-experiments
 | Keep it | `git commit` |
 | Check your edits are valid | `labctl validate` |
 
-To open Grafana, Prometheus and the apps by name in your browser, add their
-hostnames to `/etc/hosts` once (asks for sudo). The dashboard doesn't need it:
-
-```bash
-labctl hosts add
-```
+Lab URLs look like `http://grafana.snowops.localhost`: the service, the lab's
+name, then `localhost`. Every browser resolves `*.localhost` to your own
+machine, so they work with no hosts-file edits, on macOS, Linux, and in a
+Windows browser for a lab running in WSL. If port 80 is taken, the lab uses a
+free port and every URL it prints includes it.
 
 ## Everyday use
 
@@ -242,7 +241,7 @@ fix.
 
 ```bash
 labctl teardown                      # delete the cluster
-labctl hosts remove                  # if you ran `labctl hosts add`
+labctl hosts remove                  # only if you added hosts entries for an older lab
 rm -rf ~/.snowops ~/.local/bin/labctl
 rm -rf snowopslabs                   # your clone, once you no longer need your changes
 colima delete --data                 # macOS only, if you no longer need colima's VM and its images
@@ -262,7 +261,7 @@ The errors say what to do. The common ones:
 | The dashboard or `labctl status` says the cluster is unreachable | Docker or colima is stopped, usually after a reboot. Run `labctl init`. |
 | `Not enough memory for <scenario>` | Run the commands it prints to free memory (bring a scenario down, remove components nothing uses), or resize Docker as printed. |
 | URLs end in `:8080` | Something else already uses port 80, so the lab moved to 8080. Every URL and check follows it. |
-| `no such host` for `*.k3d.local` | Run `labctl hosts add`. |
+| URLs end in `.k3d.local`, need `/etc/hosts` entries, or take 5 seconds to open on a Mac | The lab was built before URLs moved to `*.localhost`, and it keeps its names. `labctl hosts add` covers it for now; `labctl reset` rebuilds it with `*.localhost` names, which need nothing. |
 | `could not find your lab` | Run `./install.sh` in your clone once, or `cd` into it. |
 | `labctl is X but the lab in … is Y` | Run `./install.sh` in your clone. |
 

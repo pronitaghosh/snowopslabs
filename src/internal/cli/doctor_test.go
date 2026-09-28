@@ -6,11 +6,14 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
 
 	"github.com/sagar2395/snowopslabs/internal/capacity"
+	"github.com/sagar2395/snowopslabs/internal/config"
 	"github.com/sagar2395/snowopslabs/internal/toolchain"
 )
 
@@ -294,6 +297,38 @@ func TestStatusLabel(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := statusLabel(tt.result); got != tt.want {
 				t.Errorf("statusLabel() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestLabDomain(t *testing.T) {
+	lab := t.TempDir()
+	for _, d := range []string{"scenarios", "runtimes/k3d"} {
+		if err := os.MkdirAll(filepath.Join(lab, d), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Setenv("SNOWOPS_HOME", t.TempDir())
+	t.Setenv("DOMAIN_SUFFIX", "")
+	t.Setenv("CLUSTER_NAME", "")
+	tests := []struct {
+		name       string
+		env        string
+		labErr     error
+		wantSuffix string
+		wantLocal  bool
+	}{
+		{name: "the default suffix resolves locally", wantSuffix: "snowops.localhost", wantLocal: true},
+		{name: "a .local suffix needs hosts entries", env: "k3d.local", wantSuffix: "k3d.local"},
+		{name: "no lab falls back to the default", labErr: config.ErrNoLab, wantSuffix: "snowops.localhost", wantLocal: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("DOMAIN_SUFFIX", tt.env)
+			suffix, local := labDomain(lab, tt.labErr)
+			if suffix != tt.wantSuffix || local != tt.wantLocal {
+				t.Errorf("labDomain = %q, %v; want %q, %v", suffix, local, tt.wantSuffix, tt.wantLocal)
 			}
 		})
 	}

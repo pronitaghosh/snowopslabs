@@ -30,7 +30,7 @@ modules:
     check:
       name: workload-healthy
       type: http
-      url: "http://go-api.${DOMAIN_SUFFIX:-k3d.local}/health"
+      url: "http://go-api.{{.IngressURLSuffix}}/health"
       expectStatus: 200
       timeoutSeconds: 60
 

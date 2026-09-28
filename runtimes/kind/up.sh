@@ -8,13 +8,13 @@ set -euo pipefail
 # platform scripts runtime-agnostic.
 #
 # Config (env, with defaults — scripts never source .env themselves):
-#   CLUSTER_NAME     cluster name (default: snowops)
+#   CLUSTER_NAME     cluster name (default: snowops-kind)
 #   HTTP_PORT        host port mapped to node :80 (default: 80)
 #   HTTPS_PORT       host port mapped to node :443 (default: 443)
 #   AGENTS           number of worker nodes (default: 1)
 #   KIND_NODE_IMAGE  pin the node image, e.g. kindest/node:v1.29.4 (default: kind's)
 
-CLUSTER_NAME="${1:-${CLUSTER_NAME:-snowops}}"
+CLUSTER_NAME="${1:-${CLUSTER_NAME:-snowops-kind}}"
 HTTP_PORT="${HTTP_PORT:-80}"
 HTTPS_PORT="${HTTPS_PORT:-443}"
 AGENTS="${AGENTS:-1}"
@@ -32,33 +32,6 @@ done
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/_lib/docker.sh"
 
 ensure_docker_running || exit 1
-
-# port_free <port> — 0 if nothing is listening on the host TCP port, non-zero if
-# it is already taken. Uses bash's /dev/tcp so it needs no nc/lsof/ss (which
-# differ across macOS and Linux — golden rule 1). The subshell scopes fd 3.
-port_free() {
-  ! (exec 3<>"/dev/tcp/127.0.0.1/$1") 2>/dev/null
-}
-
-# pick_port <preferred> <fallback-base> — echo <preferred> if it is free, else
-# the first free port at or above <fallback-base>. Lets a second cluster come up
-# on one host without colliding on the ingress host ports.
-pick_port() {
-  local preferred=$1 base=$2 p
-  if port_free "$preferred"; then
-    printf '%s' "$preferred"
-    return 0
-  fi
-  p=$base
-  while ! port_free "$p"; do
-    p=$((p + 1))
-    if [ "$p" -gt $((base + 100)) ]; then
-      echo "ERROR: no free host port found near ${base} for ingress." >&2
-      return 1
-    fi
-  done
-  printf '%s' "$p"
-}
 
 # An existing cluster is only usable if its kubeconfig entry is present and its
 # API answers. A cluster whose containers linger but whose context was removed
@@ -94,6 +67,12 @@ if kind get clusters 2>/dev/null | grep -qx "$CLUSTER_NAME"; then
   exit 0
 fi
 
+if name_used_by k3d "$CLUSTER_NAME"; then
+  echo "ERROR: a k3d cluster named '$CLUSTER_NAME' already exists on this machine." >&2
+  echo "  Lab names are unique per machine. Set CLUSTER_NAME to another name in .env (kind's default is snowops-kind), then 'labctl init'." >&2
+  exit 1
+fi
+
 # Fall back to free host ports when the defaults are already bound (e.g. another
 # cluster is running). Keeps the golden path on 80/443 untouched.
 http_port="$(pick_port "$HTTP_PORT" 8080)" || exit 1
@@ -101,7 +80,7 @@ https_port="$(pick_port "$HTTPS_PORT" 8443)" || exit 1
 if [ "$http_port" != "$HTTP_PORT" ] || [ "$https_port" != "$HTTPS_PORT" ]; then
   echo "Host ports ${HTTP_PORT}/${HTTPS_PORT} are already in use (another cluster or service)."
   echo "Exposing ingress on ${http_port}/${https_port} instead — reach services at" \
-    "http://<name>.${DOMAIN_SUFFIX:-k3d.local}:${http_port}"
+    "http://<name>.${DOMAIN_SUFFIX:-${CLUSTER_NAME}.localhost}:${http_port}"
   HTTP_PORT="$http_port"
   HTTPS_PORT="$https_port"
 fi

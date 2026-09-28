@@ -5,7 +5,7 @@ changes a scenario. Set the environment once:
 
 ```sh
 SCENARIO=mesh-traffic-management
-DOMAIN_SUFFIX=k3d.local                       # labctl status prints the profile
+DOMAIN_SUFFIX=snowops.localhost                       # add :<port> when the lab moved off 80
 PROM=http://prometheus.$DOMAIN_SUFFIX
 GRAF=http://grafana.$DOMAIN_SUFFIX
 NOTES=$SCRATCHPAD/review-$SCENARIO.md         # every command and output lands here

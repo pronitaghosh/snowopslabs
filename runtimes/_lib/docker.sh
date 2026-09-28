@@ -150,25 +150,103 @@ prepull_images() {
   done
 }
 
-# cluster_record_file <cluster> — where labctl reads what the runtime bound
-# (internal/config.ClusterStateFile).
+# cluster_record_file <cluster> — where labctl reads how this machine reaches
+# the cluster's ingress (internal/config.ClusterStateFile).
 cluster_record_file() {
   printf '%s/clusters/%s.env' "${SNOWOPS_HOME:-$HOME/.snowops}" "$1"
 }
 
-# record_ingress_ports <cluster> <container> — write the host ports mapped to
-# the container's :80 and :443. They differ from 80/443 when those are busy,
-# and labctl builds every URL and check from this record.
+# record_value <cluster> <KEY> — print KEY from the cluster's record, if any.
+record_value() {
+  local file
+  file="$(cluster_record_file "$1")"
+  [ -f "$file" ] || return 0
+  sed -n "s/^$2=//p" "$file" | tail -n 1
+}
+
+# write_record <cluster> <http-port> <https-port> <domain-suffix> — record the
+# host ports and the domain suffix labctl builds every URL and check from.
+write_record() {
+  local file
+  file="$(cluster_record_file "$1")"
+  mkdir -p "$(dirname "$file")"
+  printf 'HTTP_PORT=%s\nHTTPS_PORT=%s\nDOMAIN_SUFFIX=%s\n' "$2" "$3" "$4" >"$file"
+}
+
+# mapped_port <container> <container-port> <recorded> — the host port the
+# container maps its port to: the recorded one while it is still mapped (a
+# moved ingress maps several), else the first mapping.
+mapped_port() {
+  local ports
+  ports="$(docker port "$1" "$2/tcp" 2>/dev/null | sed 's/.*://' | sort -u)"
+  if [ -n "$3" ] && printf '%s\n' "$ports" | grep -qx "$3"; then
+    printf '%s' "$3"
+  else
+    printf '%s\n' "$ports" | head -n 1
+  fi
+}
+
+# ingress_suffix_in_use prints the domain suffix the current cluster's ingresses
+# already use (from the Grafana or Prometheus host), so a lab built before its
+# suffix was recorded keeps the hostnames it was built with.
+ingress_suffix_in_use() {
+  kubectl get ingress -A -o jsonpath='{range .items[*]}{.spec.rules[*].host}{"\n"}{end}' 2>/dev/null |
+    sed -n -e 's/^grafana\.//p' -e 's/^prometheus\.//p' | head -n 1
+}
+
+# record_ingress_ports <cluster> <container> — record the host ports mapped to
+# the container's :80 and :443 and the domain suffix of the cluster's ingress
+# hostnames. A suffix already recorded is kept; the first record takes the one
+# the cluster's ingresses use, else DOMAIN_SUFFIX.
 record_ingress_ports() {
-  local cluster="$1" container="$2" http https file
-  http="$(docker port "$container" 80/tcp 2>/dev/null | head -n 1 | sed 's/.*://')"
-  https="$(docker port "$container" 443/tcp 2>/dev/null | head -n 1 | sed 's/.*://')"
+  local cluster="$1" container="$2" http https suffix
+  http="$(mapped_port "$container" 80 "$(record_value "$cluster" HTTP_PORT)")"
+  https="$(mapped_port "$container" 443 "$(record_value "$cluster" HTTPS_PORT)")"
   case "$http" in
     '' | *[!0-9]*) return 0 ;;
   esac
-  file="$(cluster_record_file "$cluster")"
-  mkdir -p "$(dirname "$file")"
-  printf 'HTTP_PORT=%s\nHTTPS_PORT=%s\n' "$http" "${https:-443}" >"$file"
+  suffix="$(record_value "$cluster" DOMAIN_SUFFIX)"
+  [ -n "$suffix" ] || suffix="$(ingress_suffix_in_use)"
+  [ -n "$suffix" ] || suffix="${DOMAIN_SUFFIX:-${cluster}.localhost}"
+  write_record "$cluster" "$http" "${https:-443}" "$suffix"
+}
+
+# port_free <port> — 0 if nothing answers on the host TCP port. Uses bash's
+# /dev/tcp so it needs no nc/lsof/ss, which differ across macOS and Linux. The
+# subshell scopes fd 3.
+port_free() {
+  ! (exec 3<>"/dev/tcp/127.0.0.1/$1") 2>/dev/null
+}
+
+# pick_port <preferred> <fallback-base> — echo <preferred> if it is free, else
+# the first free port at or above <fallback-base>, so a second lab (or any
+# service holding the port) does not stop this one from coming up.
+pick_port() {
+  local preferred=$1 base=$2 p
+  if port_free "$preferred"; then
+    printf '%s' "$preferred"
+    return 0
+  fi
+  p=$base
+  while ! port_free "$p"; do
+    p=$((p + 1))
+    if [ "$p" -gt $((base + 100)) ]; then
+      echo "ERROR: no free host port found near ${base} for ingress." >&2
+      return 1
+    fi
+  done
+  printf '%s' "$p"
+}
+
+# name_used_by <runtime> <cluster> — succeed when another runtime on this
+# machine already has a cluster of that name. Names are unique per machine,
+# because the lab's state and hostnames are keyed by them.
+name_used_by() {
+  case "$1" in
+    k3d) command -v k3d >/dev/null 2>&1 && k3d cluster list "$2" >/dev/null 2>&1 ;;
+    kind) command -v kind >/dev/null 2>&1 && kind get clusters 2>/dev/null | grep -qx "$2" ;;
+    *) return 1 ;;
+  esac
 }
 
 # forget_cluster <cluster> — drop the record when the cluster is deleted, so a

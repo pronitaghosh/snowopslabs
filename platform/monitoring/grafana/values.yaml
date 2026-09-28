@@ -132,7 +132,7 @@ ingress:
   path: /
   pathType: Prefix
   hosts:
-    - grafana.k3d.local
+    - grafana.snowops.localhost
 
 # RBAC
 rbac:

@@ -33,7 +33,7 @@ grading:
   # checks:
   #   - name: api-healthy
   #     type: http
-  #     url: "http://go-api.k3d.local/health"
+  #     url: "http://go-api.snowops.localhost/health"
   #     expectStatus: 200
 hintPenalty: 5                     # % score deducted per hint (default 5)
 ```

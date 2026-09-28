@@ -10,6 +10,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/sagar2395/snowopslabs/internal/config"
 )
 
 func TestMergeHosts(t *testing.T) {
@@ -204,5 +206,14 @@ func TestWriteManagedHostsFile_Atomic(t *testing.T) {
 		if strings.HasPrefix(e.Name(), ".snowops-hosts-") {
 			t.Errorf("leftover temp file: %s", e.Name())
 		}
+	}
+}
+
+func TestHostsAdd_NotNeededForLocalhost(t *testing.T) {
+	oldCfg := cfg
+	t.Cleanup(func() { cfg = oldCfg })
+	cfg = &config.Config{DomainSuffix: "snowops.localhost"}
+	if err := hostsAddCmd.RunE(hostsAddCmd, nil); err != nil {
+		t.Fatalf("hosts add on a .localhost lab should do nothing and succeed: %v", err)
 	}
 }

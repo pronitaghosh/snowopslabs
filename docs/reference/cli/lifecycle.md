@@ -32,11 +32,19 @@ Building the lab, checking the machine, and reading back what labctl did.
   platform installs that are already deployed and waits for their pods to be
   Ready. If the cluster still cannot be reached it stops and suggests
   `labctl reset`, which rebuilds from scratch on purpose.
-- **Ports.** When host ports 80/443 are taken, the cluster's ingress falls back
-  to free ones (8080/8443 and up). The ports are recorded in
-  `~/.snowops/clusters/<name>.env`, and every URL labctl prints, the UI's links
-  and every check use them. Checks reach lab hostnames on `127.0.0.1` directly,
-  so grading does not need `/etc/hosts` entries and ignores `HTTP_PROXY`.
+- **URLs and ports.** Lab hostnames are `<service>.<cluster>.localhost`, so each
+  lab on a machine has its own (and its own browser cookies). When host ports
+  80/443 are taken, the cluster's ingress falls back to free ones (8080/8443 and
+  up). `~/.snowops/clusters/<name>.env` records the ports and the domain suffix
+  the cluster was built with, and every URL labctl prints, the UI's links and
+  every check use them. After the platform is up, `init` requests the lab's
+  Grafana through that port from this machine; if something else answers (a port
+  taken after the lab was built), a k3d lab gets free ports added to its load
+  balancer (`k3d cluster edit --port-add`, no rebuild) and kind says how to
+  change them. Checks reach lab hostnames on `127.0.0.1` directly, so grading
+  needs no `/etc/hosts` entries and ignores `HTTP_PROXY`.
+- **Names.** A cluster name is unique on a machine, across k3d and kind; the
+  defaults are `snowops` (k3d) and `snowops-kind` (kind).
 
 ## Preparing a machine
 
@@ -94,9 +102,14 @@ labctl check ingress    # the ingress controller is running and responding
 
 ### `labctl hosts`
 
-Manages a labctl-owned block in `/etc/hosts` so cluster ingress hostnames
-(`*.k3d.local`) resolve. The block is delimited and rewritten in place, so it is
-safe to run repeatedly.
+Lab URLs use `<service>.<cluster>.localhost` (for example
+`grafana.snowops.localhost`) by default, and every browser resolves
+`*.localhost` to this machine, so a default lab needs no hosts entries and
+`hosts add` says so and does nothing. It is for a lab with another suffix: one
+built before the `.localhost` default (`*.k3d.local`), or a `DOMAIN_SUFFIX` you
+set. It manages a labctl-owned block in `/etc/hosts` so those hostnames
+resolve; the block is delimited and rewritten in place, so it is safe to run
+repeatedly.
 
 ```bash
 labctl hosts add      # add or refresh the managed block; asks for sudo to write

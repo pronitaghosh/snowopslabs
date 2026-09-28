@@ -76,8 +76,8 @@ maybe_wsl_notice() {
     echo -e "  - Install ${YELLOW}wslu${NC} so 'labctl ui' can open your Windows browser:"
     echo "      sudo apt install -y wslu   # Debian/Ubuntu"
   fi
-  echo "  - Ingress hostnames (e.g. grafana.k3d.local) opened in a Windows browser use"
-  echo "    the WINDOWS hosts file. Run 'labctl doctor' for the full WSL checklist."
+  echo "  - Lab URLs (e.g. http://grafana.snowops.localhost) open in your Windows browser directly;"
+  echo "    run 'labctl doctor' for the full WSL checklist."
 }
 
 ensure_install_dir() {

@@ -56,9 +56,14 @@ var hostsAddCmd = &cobra.Command{
 	Short: "Add (or update) the managed /etc/hosts block",
 	Long: `Writes one /etc/hosts line naming every hostname the lab serves: the platform
 components, each app under apps/, and every Ingress host in the cluster under
-the domain suffix. Re-run it after activating a scenario that adds hostnames,
+the domain suffix. A lab whose hostnames end in .localhost (the default) needs
+none: every browser resolves them to this machine. Re-run it after activating a scenario that adds hostnames,
 such as env-promotion's <app>-dev, -staging and -prod.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if cfg.ResolvesLocally() {
+			fmt.Printf("Not needed: every browser resolves *.%s to this machine, so the lab's URLs work without /etc/hosts entries.\n", cfg.DomainSuffix)
+			return nil
+		}
 		hosts := hostsAddResolved
 		if len(hosts) == 0 {
 			hosts = collectHosts(cmd.Context(), cfg.ProjectRoot, cfg.DomainSuffix, os.Stderr)
@@ -179,6 +184,9 @@ func printHostsSummary(w io.Writer, hosts []string, before map[string]bool) {
 // It prints nothing when the cluster cannot be read or /etc/hosts has no
 // managed block.
 func warnMissingHosts(ctx context.Context, w io.Writer, domainSuffix string) {
+	if (&config.Config{DomainSuffix: domainSuffix}).ResolvesLocally() {
+		return
+	}
 	content := readHostsFile()
 	if !strings.Contains(content, hostsBegin) {
 		return

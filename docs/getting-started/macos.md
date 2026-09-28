@@ -39,7 +39,6 @@ It finishes with the lab's URLs. Then:
 
 ```bash
 labctl ui                  # http://localhost:3939
-labctl hosts add           # optional: open Grafana & co. by name (asks for sudo)
 ```
 
 ## Giving colima more memory
@@ -70,7 +69,7 @@ your apps and scenarios.
 
 ```bash
 labctl teardown
-labctl hosts remove                  # if you ran `labctl hosts add`
+labctl hosts remove                  # only if you added hosts entries for an older lab
 rm -rf ~/.snowops ~/.local/bin/labctl   # and your clone, when you no longer need it
 colima delete --data                 # removes the VM and every image in it
 ```

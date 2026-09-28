@@ -61,34 +61,6 @@ cluster_reachable() {
   kubectl --request-timeout=20s get --raw=/healthz >/dev/null 2>&1
 }
 
-# port_free <port> — 0 if nothing is listening on the host TCP port, non-zero if
-# it is already taken. Uses bash's /dev/tcp so it needs no nc/lsof/ss (which
-# differ across macOS and Linux — golden rule 1). The subshell scopes fd 3.
-port_free() {
-  ! (exec 3<>"/dev/tcp/127.0.0.1/$1") 2>/dev/null
-}
-
-# pick_port <preferred> <fallback-base> — echo <preferred> if it is free, else
-# the first free port at or above <fallback-base>. Lets a second cluster come up
-# on one host: k3d's load-balancer cannot bind a host port another cluster (or
-# any service) already holds, and would otherwise sit unstarted forever.
-pick_port() {
-  local preferred=$1 base=$2 p
-  if port_free "$preferred"; then
-    printf '%s' "$preferred"
-    return 0
-  fi
-  p=$base
-  while ! port_free "$p"; do
-    p=$((p + 1))
-    if [ "$p" -gt $((base + 100)) ]; then
-      echo "ERROR: no free host port found near ${base} for ingress." >&2
-      return 1
-    fi
-  done
-  printf '%s' "$p"
-}
-
 # Raise fs.inotify.max_user_instances on every node. The default (128) is quickly
 # exhausted by log/file watchers — most visibly promtail (observability-sre),
 # which crash-loops with "too many open files: failed to make file target
@@ -279,6 +251,11 @@ k3d_images() {
 # Disable the bundled Traefik so we manage our own install in the traefik namespace.
 # This prevents two competing Traefik instances from causing 404 errors.
 create_cluster() {
+  if name_used_by kind "$CLUSTER_NAME"; then
+    echo "ERROR: a kind cluster named '$CLUSTER_NAME' already exists on this machine." >&2
+    echo "  Lab names are unique per machine. Set CLUSTER_NAME to another name in .env, then 'labctl init'." >&2
+    exit 1
+  fi
   # Fall back to free host ports when the defaults are already bound (e.g. another
   # k3d cluster is running). Keeps the golden path on 80/443 untouched.
   local http_port https_port
@@ -287,7 +264,7 @@ create_cluster() {
   if [ "$http_port" != "$HTTP_PORT" ] || [ "$https_port" != "$HTTPS_PORT" ]; then
     echo "Host ports ${HTTP_PORT}/${HTTPS_PORT} are already in use (another cluster or service)."
     echo "Exposing ingress on ${http_port}/${https_port} instead — reach services at" \
-      "http://<name>.${DOMAIN_SUFFIX:-k3d.local}:${http_port}"
+      "http://<name>.${DOMAIN_SUFFIX:-${CLUSTER_NAME}.localhost}:${http_port}"
     HTTP_PORT="$http_port"
     HTTPS_PORT="$https_port"
   fi

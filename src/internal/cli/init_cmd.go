@@ -50,6 +50,7 @@ var initCmd = &cobra.Command{
 		if err := scriptExec.RunScript(fmt.Sprintf("runtimes/%s/up.sh", cfg.Profile), cfg.ClusterName); err != nil {
 			return fmt.Errorf("bringing up the cluster failed: %w", err)
 		}
+		reloadIngress()
 
 		// An existing lab has nothing to install, and helm upgrades would race
 		// pods that are still restarting, so it only waits for them instead.
@@ -65,6 +66,9 @@ var initCmd = &cobra.Command{
 			}
 		}
 		if err := checkClusterHealthy(ctx, out); err != nil {
+			return err
+		}
+		if err := ensureIngressReachable(ctx, out); err != nil {
 			return err
 		}
 		printPostInitHints(out)
@@ -187,19 +191,20 @@ func cmdContext(cmd *cobra.Command) context.Context {
 }
 
 // printPostInitHints prints the lab's URLs and next steps. It reloads the
-// ports first, because the runtime records the ones it actually bound.
+// ports and domain suffix first, because the runtime records the ones the
+// cluster actually uses.
 func printPostInitHints(out io.Writer) {
 	if fresh, err := config.Load(cfg.ProjectRoot); err == nil {
-		cfg.HTTPPort, cfg.HTTPSPort = fresh.HTTPPort, fresh.HTTPSPort
+		cfg.HTTPPort, cfg.HTTPSPort, cfg.DomainSuffix = fresh.HTTPPort, fresh.HTTPSPort, fresh.DomainSuffix
 	}
 	fmt.Fprintln(out, "\n=== Lab is up ===")
 	fmt.Fprintf(out, "\n  Grafana:     %s   (admin / admin)\n", cfg.IngressURL("grafana"))
 	fmt.Fprintf(out, "  Prometheus:  %s\n", cfg.IngressURL("prometheus"))
 	fmt.Fprintln(out, "  labctl UI:   run 'labctl ui', then open http://localhost:3939")
 	if cfg.HTTPPort != "" && cfg.HTTPPort != "80" {
-		fmt.Fprintf(out, "\nPort 80 was busy, so the lab's ingress listens on %s; every URL and check uses it.\n", cfg.HTTPPort)
+		fmt.Fprintf(out, "\nPort 80 was taken, so the lab's ingress listens on %s; every URL and check uses it.\n", cfg.HTTPPort)
 	}
-	if !hostsBlockPresent() {
+	if !cfg.ResolvesLocally() && !hostsBlockPresent() {
 		fmt.Fprintln(out, "\nTo open those URLs in your browser, add the lab hostnames to /etc/hosts")
 		fmt.Fprintln(out, "(one-time, needs sudo):  labctl hosts add")
 	}

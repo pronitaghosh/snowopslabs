@@ -34,8 +34,10 @@ page collects them by symptom. `labctl doctor` checks your machine, and
 | `<scenario> must run on its own` | Bring down the other active scenarios first. |
 | `platform prerequisite(s) not installed` or `required app(s) not deployed` | Install what it names, or re-run with `--deploy-prereqs`. |
 | URLs end in `:8080` | Something else holds port 80, so the ingress moved to 8080. Every URL and check follows it. To get 80 back, free it and `labctl reset`. |
-| `no such host` for `*.k3d.local` | Run `labctl hosts add` (asks for sudo), and again when `scenario up` reports a new hostname. |
-| A check says Prometheus or Grafana returned 404 | Another service on port 80 answered instead of the lab. Re-run `labctl init` so labctl picks up the lab's real port. |
+| A lab URL shows another page, an empty reply, or nothing | Another lab or program on this machine (another user's Docker VM, for one) answers on the lab's port. `labctl init` checks this and moves a k3d lab to a free port; on kind, free the port or set `HTTP_PORT` / `HTTPS_PORT` and `labctl reset`. |
+| URLs end in `.k3d.local`, need `/etc/hosts` entries, or take 5 seconds to open on a Mac | The lab was built before URLs moved to `*.localhost` and keeps its names (macOS sends `.local` lookups to Bonjour, which is slow). `labctl hosts add` covers it; `labctl reset` rebuilds it with `*.localhost` names, which need nothing. |
+| `a kind cluster named 'snowops' already exists` (or k3d) | Lab names are unique per machine, because URLs and lab state are keyed by them. Set `CLUSTER_NAME` in `.env` to another name. |
+| A check says Prometheus or Grafana returned 404 | Another service on the lab's port answered instead of the lab. Re-run `labctl init`; it confirms the lab answers and moves it if not. |
 | An app pod is in `ImagePullBackOff` | Its image was not built into the cluster. `labctl app build <name>`, or use `--deploy-prereqs`. |
 
 ## Windows (WSL2)

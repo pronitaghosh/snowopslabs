@@ -61,6 +61,6 @@ order and wait until it is healthy; your apps and scenarios are kept.
 
 ```bash
 labctl teardown
-labctl hosts remove                  # if you ran `labctl hosts add`
+labctl hosts remove                  # only if you added hosts entries for an older lab
 rm -rf ~/.snowops ~/.local/bin/labctl   # and your clone, when you no longer need it
 ```

@@ -14,7 +14,7 @@ set -euo pipefail
 NS="${TARGET_NAMESPACE:-go-api}"
 SVC="${TARGET_WORKLOAD:-go-api}"
 DEPLOY="${TARGET_WORKLOAD:-go-api}"
-SUFFIX="${DOMAIN_SUFFIX:-k3d.local}"
+SUFFIX="${DOMAIN_SUFFIX:-${CLUSTER_NAME:-snowops}.localhost}"
 
 SELECTOR="$(kubectl -n "$NS" get svc "$SVC" -o 'jsonpath={.spec.selector}' 2>/dev/null || true)"
 if [ -z "$SELECTOR" ] || [ "$SELECTOR" = "{}" ]; then

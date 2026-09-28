@@ -33,7 +33,7 @@ ingress:
   enabled: true
   className: traefik
   hosts:
-    - host: go-api.k3d.local
+    - host: go-api.snowops.localhost
       paths:
         - path: /
           pathType: Prefix

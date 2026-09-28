@@ -121,6 +121,10 @@ type Progress struct {
 
 // Engine manages learning paths and per-path progress.
 type Engine struct {
+	// Expand, when set, resolves template variables such as
+	// {{.IngressURLSuffix}} in intro text, so its URLs match the lab.
+	Expand func(string) string
+
 	learnDir   string
 	stateDir   string
 	resultsDir string // directory for the unified results store (empty = disabled)
@@ -187,6 +191,9 @@ func (e *Engine) IntroText(p *Path, m Module) (string, error) {
 	data, err := os.ReadFile(filepath.Join(p.dir, m.Intro))
 	if err != nil {
 		return "", err
+	}
+	if e.Expand != nil {
+		return e.Expand(string(data)), nil
 	}
 	return string(data), nil
 }

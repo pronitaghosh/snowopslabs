@@ -2,7 +2,7 @@
 set -euo pipefail
 
 NAMESPACE="${MONITORING_NAMESPACE:-monitoring}"
-DOMAIN_SUFFIX="${DOMAIN_SUFFIX:-k3d.local}"
+DOMAIN_SUFFIX="${DOMAIN_SUFFIX:-${CLUSTER_NAME:-snowops}.localhost}"
 KUBE_PROMETHEUS_STACK_VERSION="${KUBE_PROMETHEUS_STACK_VERSION:-89.2.0}"
 
 echo "Installing Prometheus Stack (prometheus-operator, kube-prometheus-stack, node-exporter, kube-state-metrics)..."
@@ -88,6 +88,6 @@ EOF
 
 echo "Prometheus Stack installed successfully"
 echo ""
-echo "Access Prometheus at:   http://prometheus.${INGRESS_URL_SUFFIX:-${DOMAIN_SUFFIX:-k3d.local}} (via Traefik ingress)"
-echo "Access Alertmanager at: http://alertmanager.${INGRESS_URL_SUFFIX:-${DOMAIN_SUFFIX:-k3d.local}} (via Traefik ingress)"
+echo "Access Prometheus at:   http://prometheus.${INGRESS_URL_SUFFIX:-${DOMAIN_SUFFIX:-${CLUSTER_NAME:-snowops}.localhost}} (via Traefik ingress)"
+echo "Access Alertmanager at: http://alertmanager.${INGRESS_URL_SUFFIX:-${DOMAIN_SUFFIX:-${CLUSTER_NAME:-snowops}.localhost}} (via Traefik ingress)"
 echo "Namespace: $NAMESPACE"
