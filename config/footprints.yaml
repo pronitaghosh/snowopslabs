@@ -1,0 +1,49 @@
+# Memory footprints, in MiB, of what the lab runs. The capacity check that
+# decides whether a scenario or fault fits (internal/capacity) adds these up.
+# A scenario's own workloads are in its requirements.memory, not here.
+#
+# Values are the memory the k3d node containers gain, as `docker stats`
+# reports it, rounded up to 50 MiB; entries marked "estimate" are not yet
+# measured. Re-measure with scripts/measure-footprints.sh when a scenario,
+# chart or version changes.
+
+# The cluster (server + one agent) with the platform `labctl init` installs:
+# Traefik, kube-prometheus-stack and Grafana.
+baseline: 1900
+
+# Each agent node beyond the first, idle with the lab's DaemonSets.
+agent: 600
+
+# Helm releases scenarios install, by release name.
+releases:
+  loki: 200
+  promtail: 150
+  tempo: 50
+  alloy: 100  # estimate
+  kyverno: 300
+  cert-manager: 150
+
+# Platform components, by category/provider (or bare category).
+platform:
+  data/kafka: 1200
+  data/postgres: 300  # estimate
+  gitops/argocd: 350
+  chaos/chaos-mesh: 100
+  autoscaling/keda: 100
+  cost/opencost: 50
+  secrets/vault: 100
+  secrets/external-secrets: 100
+  mesh: 100
+  mesh/istio: 100
+  mesh/linkerd: 100  # estimate
+  logging/loki: 350  # loki + promtail
+  tracing/tempo: 50
+
+# Deployable apps, by name.
+apps:
+  go-api: 50
+  echo-server: 50  # estimate
+  java-api: 400  # estimate
+
+# Anything not listed above.
+unlisted: 100

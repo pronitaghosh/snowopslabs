@@ -35,6 +35,7 @@ import (
 	"github.com/sagar2395/snowopslabs/internal/scenario"
 	"github.com/sagar2395/snowopslabs/internal/services"
 	"github.com/sagar2395/snowopslabs/internal/store"
+	"github.com/sagar2395/snowopslabs/internal/toolchain"
 )
 
 // Server is the API server that backs the web UI.
@@ -46,11 +47,13 @@ type Server struct {
 	incidents *incident.Engine
 	svcs      *services.Registry
 	runtimes  *runtime.Manager
-	router    *mux.Router
-	upgrader  websocket.Upgrader
-	uiFS      fs.FS
-	uiDir     string
-	uiSource  string
+	// docker runs the docker CLI for the capacity report.
+	docker   toolchain.Runner
+	router   *mux.Router
+	upgrader websocket.Upgrader
+	uiFS     fs.FS
+	uiDir    string
+	uiSource string
 
 	// runStore is the durable run store the run console reads.
 	runStore *store.Store
@@ -101,6 +104,7 @@ func NewServer(cfg *config.Config, exec *executor.Executor, registry *platform.R
 		incidents: incidents,
 		svcs:      svcs,
 		runtimes:  rtm,
+		docker:    toolchain.NewExec(),
 		upgrader: websocket.Upgrader{
 			CheckOrigin: originAllowed,
 		},
@@ -314,6 +318,7 @@ func (s *Server) registerAPI(api *mux.Router) {
 	api.HandleFunc("/auth/logout", s.handleAuthLogout).Methods("POST", "OPTIONS")
 
 	api.HandleFunc("/status", s.handleStatus).Methods("GET", "OPTIONS")
+	api.HandleFunc("/capacity", s.handleCapacity).Methods("GET", "OPTIONS")
 	api.HandleFunc("/jobs", s.handleJobs).Methods("GET", "OPTIONS")
 	api.HandleFunc("/apps", s.handleListApps).Methods("GET", "OPTIONS")
 	api.HandleFunc("/apps/{name}/detail", s.handleAppDetail).Methods("GET", "OPTIONS")

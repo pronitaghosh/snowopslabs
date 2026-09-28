@@ -49,13 +49,14 @@ pod_mib() {
 # release_mib <namespace> <release> sums the memory of a Helm release's pods.
 release_mib() {
   local pods
-  pods="$(kubectl get pods -n "$1" -l "app.kubernetes.io/instance=$2" -o name 2>/dev/null | sed 's|^pod/||')"
+  # One line, space-separated: awk -v does not take a value with newlines.
+  pods="$(kubectl get pods -n "$1" -l "app.kubernetes.io/instance=$2" -o name 2>/dev/null | sed 's|^pod/||' | tr '\n' ' ')"
   [ -n "$pods" ] || {
     echo 0
     return
   }
   pod_mib | awk -v ns="$1" -v pods="$pods" '
-    BEGIN { n = split(pods, p, "\n"); for (i = 1; i <= n; i++) want[p[i]] = 1 }
+    BEGIN { n = split(pods, p, " "); for (i = 1; i <= n; i++) want[p[i]] = 1 }
     $1 == ns && ($2 in want) { total += $3 }
     END { printf "%d\n", total }'
 }

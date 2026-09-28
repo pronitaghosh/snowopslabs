@@ -20,6 +20,11 @@ import (
 // use. The rest absorbs start-up spikes, page cache and the engine itself.
 const usableShare = 0.85
 
+// UsableMiB is the part of the engine's memory the lab may plan to use.
+func UsableMiB(r Resources) int {
+	return int(r.MemGiB() * 1024 * usableShare)
+}
+
 // Footprints are the measured memory costs, in MiB, of what the lab can run.
 // They live in config/footprints.yaml.
 type Footprints struct {
@@ -123,6 +128,10 @@ type Lab struct {
 	UsedMiB int
 	// Running holds the items already running, which cost nothing more.
 	Running map[Item]bool
+	// Installed are the platform components installed beyond the baseline.
+	// They keep running after the scenario that needed them goes down, so
+	// removing one is a way to make room.
+	Installed []Item
 	// Agents is the cluster's current agent count.
 	Agents int
 	// CanAddAgents reports whether the runtime can add agent nodes live.
@@ -178,7 +187,7 @@ func Evaluate(f Footprints, lab Lab, active []Demand, next Demand) Verdict {
 		}
 		v.NeedMiB = max(declared, live)
 	}
-	v.LimitMiB = int(lab.Engine.MemGiB() * 1024 * usableShare)
+	v.LimitMiB = UsableMiB(lab.Engine)
 	if v.NeedMiB > v.LimitMiB {
 		v.Problems = append(v.Problems, memoryProblem(f, lab, active, next, v))
 	}
@@ -226,11 +235,10 @@ func memoryProblem(f Footprints, lab Lab, active []Demand, next Demand, v Verdic
 		"(85%% of Docker's %s GB, keeping room for spikes).\n",
 		next.Name, gbString(v.NeedMiB), gbString(v.LimitMiB), gbString(int(lab.Engine.MemBytes>>20)))
 
-	target := math.Ceil(float64(v.NeedMiB) / usableShare / 1024)
-	resize := Need{CPUs: max(lab.Engine.CPUs, Floor.CPUs), MemGiB: math.Max(target, Floor.MemGiB)}
+	resize := Need{CPUs: max(lab.Engine.CPUs, Floor.CPUs), MemGiB: resizeGiB(lab.Engine, v.NeedMiB)}
 	hint := lab.Host.ResizeHint(resize)
-	if down := makeRoom(f, active, next, v.NeedMiB-v.LimitMiB); len(down) > 0 {
-		fmt.Fprintf(&b, "Either bring something down:\n  labctl scenario down %s\n", strings.Join(down, " "))
+	if cmds := makeRoom(f, lab, active, next, v.NeedMiB-v.LimitMiB); len(cmds) > 0 {
+		fmt.Fprintf(&b, "Either free memory:\n  %s\n", strings.Join(cmds, "\n  "))
 		fmt.Fprintf(&b, "or give Docker %s GB:\n  %s", formatGiB(resize.MemGiB), hint)
 	} else {
 		fmt.Fprintf(&b, "Give Docker %s GB:\n  %s", formatGiB(resize.MemGiB), hint)
@@ -238,20 +246,42 @@ func memoryProblem(f Footprints, lab Lab, active []Demand, next Demand, v Verdic
 	return b.String()
 }
 
-// makeRoom picks the active activations to bring down, largest saving first,
-// until at least shortMiB is freed. It returns nil when bringing everything
-// down would not be enough.
-func makeRoom(f Footprints, active []Demand, next Demand, shortMiB int) []string {
+// resizeGiB is the Docker size, in whole GB as colima and Docker Desktop take
+// it, whose usable share covers needMiB. It is always larger than the size the
+// engine has now, and never below the floor.
+func resizeGiB(engine Resources, needMiB int) float64 {
+	target := math.Ceil(float64(needMiB) / usableShare / 1024 / memTolerance)
+	current := math.Round(engine.MemGiB() / memTolerance)
+	return math.Max(math.Max(target, current+1), Floor.MemGiB)
+}
+
+// makeRoom picks what to remove, largest saving first, until at least
+// shortMiB is freed: active scenarios or faults, each with the installed
+// platform components only it uses, and components nothing uses. It returns
+// the commands to run, or nil when removing everything would not be enough.
+func makeRoom(f Footprints, lab Lab, active []Demand, next Demand, shortMiB int) []string {
 	type saving struct {
-		name string
-		mib  int
+		commands []string
+		mib      int
 	}
-	savings := make([]saving, 0, len(active))
+	savings := make([]saving, 0, len(active)+len(lab.Installed))
 	for i, d := range active {
 		others := append(slices.Clone(active[:i]), active[i+1:]...)
 		others = append(others, next)
-		freed := d.OwnMiB + sharedCost(f, append(slices.Clone(others), d)) - sharedCost(f, others)
-		savings = append(savings, saving{name: d.Name, mib: freed})
+		s := saving{commands: []string{downCommand(d.Name)}, mib: d.OwnMiB + releaseCost(f, d, others)}
+		for _, item := range lab.Installed {
+			if uses([]Demand{d}, item) && !uses(others, item) {
+				s.commands = append(s.commands, platformDownCommand(item))
+				s.mib += f.cost(item)
+			}
+		}
+		savings = append(savings, s)
+	}
+	everyone := append(slices.Clone(active), next)
+	for _, item := range lab.Installed {
+		if !uses(everyone, item) {
+			savings = append(savings, saving{commands: []string{platformDownCommand(item)}, mib: f.cost(item)})
+		}
 	}
 	slices.SortFunc(savings, func(a, b saving) int { return cmp.Compare(b.mib, a.mib) })
 
@@ -261,13 +291,62 @@ func makeRoom(f Footprints, active []Demand, next Demand, shortMiB int) []string
 		if freed >= shortMiB {
 			break
 		}
-		picked = append(picked, s.name)
+		picked = append(picked, s.commands...)
 		freed += s.mib
 	}
 	if freed < shortMiB {
 		return nil
 	}
 	return picked
+}
+
+// releaseCost is the footprint of the Helm releases d installs that none of
+// others uses: bringing d down uninstalls them.
+func releaseCost(f Footprints, d Demand, others []Demand) int {
+	total := 0
+	for _, item := range uniqueItems([]Demand{d}) {
+		if item.Kind == ItemRelease && !uses(others, item) {
+			total += f.cost(item)
+		}
+	}
+	return total
+}
+
+// uses reports whether any of demands needs item.
+func uses(demands []Demand, item Item) bool {
+	for _, d := range demands {
+		for _, want := range d.Items {
+			if want.Covers(item) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// platformDownCommand is the command that uninstalls a platform component.
+func platformDownCommand(item Item) string {
+	return "labctl platform down " + item.Name
+}
+
+// downCommand is the command that deactivates a demand: a fault, named
+// "incident <name>", is resolved; a scenario is brought down.
+func downCommand(name string) string {
+	if strings.HasPrefix(name, "incident ") {
+		return "labctl incident resolve"
+	}
+	return "labctl scenario down " + name
+}
+
+// Covers reports whether item satisfies other: they are equal, or item is a
+// bare platform category ("mesh") and other one of its providers ("mesh/istio").
+func (item Item) Covers(other Item) bool {
+	if item == other {
+		return true
+	}
+	category, _, found := strings.Cut(other.Name, "/")
+	return found && item.Kind == ItemPlatform && other.Kind == ItemPlatform &&
+		!strings.Contains(item.Name, "/") && item.Name == category
 }
 
 // sharedCost is the footprint of every distinct item the demands use.

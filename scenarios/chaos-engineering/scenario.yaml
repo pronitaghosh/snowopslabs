@@ -12,6 +12,10 @@ prerequisites:
     - chaos/chaos-mesh
   apps:
     - "{{.WorkloadName}}"
+# Memory for this scenario's own workloads; shared releases, platform
+# components and apps are counted from config/footprints.yaml.
+requirements:
+  memory: 700Mi
 runtimes:
   - k3d
   - kind

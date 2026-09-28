@@ -89,6 +89,9 @@ type Engine struct {
 	// Admit, when set, is asked before a scenario is activated whether the lab
 	// has room for it; an error blocks the activation.
 	Admit AdmitFunc
+	// Release, when set, is called after a scenario is deactivated with what
+	// the remaining active scenarios need; an error is reported, not returned.
+	Release ReleaseFunc
 
 	scenarios  map[string]*Scenario
 	loadErrors map[string]error // scenario dir name → why it failed to load
@@ -567,6 +570,11 @@ func (e *Engine) Down(name string, exec CommandExecutor) error {
 	}
 
 	e.markInactive(name)
+	if e.Release != nil {
+		if err := e.Release(context.Background(), e.ActiveDemands("")); err != nil {
+			fmt.Fprintf(e.output(), "  Warning: %v\n", err)
+		}
+	}
 	fmt.Fprintln(e.output(), "\nScenario deactivated.")
 	return nil
 }

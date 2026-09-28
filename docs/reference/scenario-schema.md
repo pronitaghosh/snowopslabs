@@ -324,7 +324,7 @@ requirements:
 |---|---|
 | `memory` | A Kubernetes quantity (`300Mi`, `1.5Gi`) for the workloads that belong to this scenario alone. Leave out the Helm releases it installs, the platform components it lists and its apps: those have measured footprints in `config/footprints.yaml` and are counted once however many active scenarios share them. |
 | `cpus` | Fewer Docker CPUs only warns; the scenario runs slowly. |
-| `agents` | k3d adds the missing agent nodes when the scenario starts, if memory allows. kind cannot add nodes to a running cluster, so the activation stops and asks for `AGENTS=<n>` and `labctl reset`. |
+| `agents` | k3d adds the missing agent nodes when the scenario starts, if memory allows, and removes them when it goes down and nothing active needs them. kind cannot add nodes to a running cluster, so the activation stops and asks for `AGENTS=<n>` and `labctl reset`. |
 | `exclusive` | For a drill that changes the cluster itself, such as replacing its nodes. Nothing else may be active while it is, and it cannot start while anything else is. |
 
 Before a scenario (or a fault, which takes the same `requirements` in

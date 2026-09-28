@@ -37,6 +37,24 @@ func lab4GB() Lab {
 	}
 }
 
+func TestUsableMiB(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    Resources
+		expected int
+	}{
+		{name: "4 GiB", input: Resources{CPUs: 2, MemBytes: 4 << 30}, expected: 3481},
+		{name: "none", input: Resources{}, expected: 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := UsableMiB(tt.input); got != tt.expected {
+				t.Errorf("UsableMiB = %d, want %d", got, tt.expected)
+			}
+		})
+	}
+}
+
 func TestLoadFootprints(t *testing.T) {
 	dir := t.TempDir()
 	write := func(name, body string) string {
@@ -171,7 +189,7 @@ func TestEvaluate(t *testing.T) {
 			allowed: false,
 			needMiB: 2000 + 300 + 200 + 100 + 100 + 800 + 50,
 			wantProblems: []string{
-				"labctl scenario down cost-right-sizing",
+				"Either free memory:\n  labctl scenario down cost-right-sizing",
 				"or give Docker 5 GB",
 			},
 		},
@@ -282,27 +300,84 @@ func TestEvaluate(t *testing.T) {
 	}
 }
 
+func TestResizeGiB(t *testing.T) {
+	tests := []struct {
+		name     string
+		engine   Resources
+		needMiB  int
+		expected float64
+	}{
+		{name: "covers the need after the vm's own share", engine: Resources{MemBytes: 4094 << 20}, needMiB: 4096, expected: 5},
+		{name: "never the size the engine already has", engine: Resources{MemBytes: 4094 << 20}, needMiB: 3482, expected: 5},
+		{name: "a large need", engine: Resources{MemBytes: 4094 << 20}, needMiB: 6000, expected: 8},
+		{name: "never below the floor", engine: Resources{MemBytes: 1 << 30}, needMiB: 900, expected: 4},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := resizeGiB(tt.engine, tt.needMiB); got != tt.expected {
+				t.Errorf("resizeGiB = %v, want %v", got, tt.expected)
+			}
+		})
+	}
+}
+
 func TestMakeRoom(t *testing.T) {
 	small := Demand{Name: "small", OwnMiB: 100}
 	big := Demand{Name: "big", OwnMiB: 900}
 	shared := Demand{Name: "shares-loki", Items: []Item{loki}}
+	withKafka := Demand{Name: "kafka-lab", OwnMiB: 100, Items: []Item{{Kind: ItemPlatform, Name: "data"}}}
+	fault := Demand{Name: "incident oom-kill", OwnMiB: 400}
 	next := Demand{Name: "next", Items: []Item{loki}}
 
 	tests := []struct {
-		name     string
-		active   []Demand
-		short    int
-		expected []string
+		name      string
+		active    []Demand
+		installed []Item
+		short     int
+		expected  []string
 	}{
-		{name: "largest saving first", active: []Demand{small, big}, short: 500, expected: []string{"big"}},
-		{name: "several when one is not enough", active: []Demand{small, big}, short: 950, expected: []string{"big", "small"}},
+		{name: "largest saving first", active: []Demand{small, big}, short: 500,
+			expected: []string{"labctl scenario down big"}},
+		{name: "several when one is not enough", active: []Demand{small, big}, short: 950,
+			expected: []string{"labctl scenario down big", "labctl scenario down small"}},
 		{name: "not enough even with everything down", active: []Demand{small}, short: 500, expected: nil},
-		{name: "an item next also uses frees nothing", active: []Demand{shared}, short: 100, expected: nil},
+		{name: "a release next also uses frees nothing", active: []Demand{shared}, short: 100, expected: nil},
+		{name: "a component nothing uses can make room", active: []Demand{small}, installed: []Item{kafka}, short: 1000,
+			expected: []string{"labctl platform down data/kafka"}},
+		{name: "a scenario comes down with the components only it uses", active: []Demand{withKafka}, installed: []Item{kafka}, short: 1000,
+			expected: []string{"labctl scenario down kafka-lab", "labctl platform down data/kafka"}},
+		{name: "a scenario down alone does not free its components", active: []Demand{withKafka}, short: 1000, expected: nil},
+		{name: "a fault is resolved, not brought down", active: []Demand{fault}, short: 300,
+			expected: []string{"labctl incident resolve"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := makeRoom(footprints, tt.active, next, tt.short); !slices.Equal(got, tt.expected) {
+			got := makeRoom(footprints, Lab{Installed: tt.installed}, tt.active, next, tt.short)
+			if !slices.Equal(got, tt.expected) {
 				t.Errorf("makeRoom = %v, want %v", got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestItem_Covers(t *testing.T) {
+	istio := Item{Kind: ItemPlatform, Name: "mesh/istio"}
+	tests := []struct {
+		name     string
+		item     Item
+		other    Item
+		expected bool
+	}{
+		{name: "equal items", item: kafka, other: kafka, expected: true},
+		{name: "a category covers its provider", item: Item{Kind: ItemPlatform, Name: "mesh"}, other: istio, expected: true},
+		{name: "a provider does not cover its category", item: istio, other: Item{Kind: ItemPlatform, Name: "mesh"}, expected: false},
+		{name: "another category", item: Item{Kind: ItemPlatform, Name: "data"}, other: istio, expected: false},
+		{name: "a release is not a platform category", item: Item{Kind: ItemRelease, Name: "mesh"}, other: istio, expected: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.item.Covers(tt.other); got != tt.expected {
+				t.Errorf("Covers = %v, want %v", got, tt.expected)
 			}
 		})
 	}

@@ -11,6 +11,10 @@ prerequisites:
     - monitoring/grafana
   apps:
     - "{{.WorkloadName}}"
+# Memory for this scenario's own workloads; shared releases, platform
+# components and apps are counted from config/footprints.yaml.
+requirements:
+  memory: 300Mi
 runtimes:
   - k3d
   - kind

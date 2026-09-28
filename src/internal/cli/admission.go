@@ -20,7 +20,7 @@ import (
 // newAdmissionGate builds the capacity gate for the configured lab, or nil for
 // a runtime whose memory is not the Docker engine's (incluster).
 func newAdmissionGate() *admission.Gate {
-	label, ok := nodeContainerLabel(cfg.Profile, cfg.ClusterName)
+	label, ok := capacity.NodeLabel(cfg.Profile, cfg.ClusterName)
 	if !ok {
 		return nil
 	}
@@ -34,26 +34,28 @@ func newAdmissionGate() *admission.Gate {
 		Platform:     capacity.Platform{GOOS: runtime.GOOS, WSL: isWSL()},
 		UsageLabel:   label,
 		CanAddAgents: cfg.Profile == "k3d",
+		MinAgents:    configuredAgents(),
 		Active:       scenes.ActiveDemands,
 		Running:      itemRunning,
+		Installed:    installedPlatform,
 		Agents:       k8s.AgentCount,
 		AddAgents: func(_ context.Context, total int) error {
 			return scriptExec.RunScript(filepath.Join("runtimes", cfg.Profile, "add-agents.sh"), strconv.Itoa(total))
 		},
+		RemoveAgents: func(_ context.Context, total int) error {
+			return scriptExec.RunScript(filepath.Join("runtimes", cfg.Profile, "remove-agents.sh"), strconv.Itoa(total))
+		},
 	}
 }
 
-// nodeContainerLabel is the Docker label that selects a local cluster's node
-// containers, and false for a runtime with none.
-func nodeContainerLabel(profile, cluster string) (string, bool) {
-	switch profile {
-	case "k3d":
-		return "k3d.cluster=" + cluster, true
-	case "kind":
-		return "io.x-k8s.kind.cluster=" + cluster, true
-	default:
-		return "", false
+// configuredAgents is the agent count the cluster was created with (AGENTS),
+// or 1, up.sh's default, when unset or unreadable.
+func configuredAgents() int {
+	n, err := strconv.Atoi(cfg.Agents)
+	if err != nil || n < 0 {
+		return 1
 	}
+	return n
 }
 
 // itemRunning reports whether a release, platform component or app already
@@ -78,13 +80,37 @@ func itemRunning(ctx context.Context, item capacity.Item) bool {
 	}
 }
 
-// attachAdmissionGate attaches the capacity gate to both engines, so every activation
-// path (CLI, web UI, challenges) is checked the same way.
+// installedPlatform lists the platform components installed beyond the
+// baseline `labctl init` sets up (ingress, metrics and Grafana).
+func installedPlatform(ctx context.Context) []capacity.Item {
+	items := []capacity.Item{}
+	for _, category := range reg.Categories() {
+		if category == "ingress" || category == "monitoring/metrics" {
+			continue
+		}
+		providers := reg.GetProviders(category)
+		for i := range providers {
+			p := &providers[i]
+			if category == "monitoring" && p.Name == "grafana" {
+				continue
+			}
+			if providerInstalled(ctx, p) {
+				items = append(items, capacity.Item{Kind: capacity.ItemPlatform, Name: category + "/" + p.Name})
+			}
+		}
+	}
+	return items
+}
+
+// attachAdmissionGate attaches the capacity gate to both engines, so every
+// activation path (CLI, web UI, challenges) is checked the same way and a
+// deactivated scenario gives back the agent nodes only it needed.
 func attachAdmissionGate() {
 	gate := newAdmissionGate()
 	if gate == nil {
 		return
 	}
 	scenes.Admit = gate.Admit
+	scenes.Release = gate.Release
 	incEng.Admit = gate.Admit
 }

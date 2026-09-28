@@ -152,6 +152,16 @@ export interface StatusResponse {
   ingressUrlSuffix?: string
 }
 
+/** GET /capacity: the Docker engine's size and the lab's memory use, in MiB. */
+export interface Capacity {
+  cpus: number
+  memoryMiB: number
+  /** Memory in use on the machine that runs the cluster. */
+  usedMiB: number
+  /** The part of memoryMiB the capacity check lets the lab plan to use. */
+  usableMiB: number
+}
+
 // ── Scenarios ────────────────────────────────────────────────────────────────
 
 export interface ScenarioPrerequisites {

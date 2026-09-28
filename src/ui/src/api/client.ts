@@ -1,5 +1,6 @@
 import type {
   StatusResponse,
+  Capacity,
   AppInfo,
   AppDetail,
   PlatformProvidersMap,
@@ -121,6 +122,7 @@ export const api = {
 
   // ── Status ──────────────────────────────────────────────────────────────
   getStatus:    ()           => req<StatusResponse>('/status'),
+  getCapacity:  ()           => req<Capacity>('/capacity'),
   getDashboards: ()          => req<DashboardURL[]>('/dashboards'),
   getJobs:      ()           => req<JobInfo[]>('/jobs'),
 

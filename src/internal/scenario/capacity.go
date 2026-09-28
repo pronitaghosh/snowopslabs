@@ -16,6 +16,10 @@ import (
 // the lab. It writes any warnings to out and returns an error to block it.
 type AdmitFunc func(ctx context.Context, out io.Writer, next capacity.Demand) error
 
+// ReleaseFunc is told, after a scenario is deactivated, what the scenarios
+// still active need, so the lab can give back what only that scenario used.
+type ReleaseFunc func(ctx context.Context, remaining []capacity.Demand) error
+
 // baselinePlatform are the platform components `labctl init` installs. The
 // capacity baseline already includes them, so scenarios naming them add
 // nothing.
@@ -44,10 +48,15 @@ func (e *Engine) Demand(s *Scenario) (capacity.Demand, error) {
 		}
 	}
 	for _, comp := range s.AllComponents() {
-		if comp.Type == "helm" {
-			ns := e.componentNamespace(&comp, "default")
-			d.Items = append(d.Items, capacity.Item{Kind: capacity.ItemRelease, Name: ns + "/" + comp.Name})
+		if comp.Type != "helm" {
+			continue
 		}
+		if owner, ok := adoptedFrom(&comp); ok {
+			d.Items = append(d.Items, capacity.Item{Kind: capacity.ItemPlatform, Name: owner})
+			continue
+		}
+		ns := e.componentNamespace(&comp, "default")
+		d.Items = append(d.Items, capacity.Item{Kind: capacity.ItemRelease, Name: ns + "/" + comp.Name})
 	}
 	for _, app := range e.ResolvedPrereqApps(s) {
 		d.Items = append(d.Items, capacity.Item{Kind: capacity.ItemApp, Name: app})
@@ -58,6 +67,20 @@ func (e *Engine) Demand(s *Scenario) (capacity.Demand, error) {
 	}
 	d.OwnMiB = own
 	return d, nil
+}
+
+// adoptedFrom is the platform component ("logging/loki") an adopted release
+// belongs to, taken from its platformValues path. Bringing the scenario down
+// leaves such a release installed, so it counts as that platform component.
+func adoptedFrom(comp *Component) (string, bool) {
+	if !comp.Adopt || comp.PlatformValues == "" {
+		return "", false
+	}
+	parts := strings.SplitN(comp.PlatformValues, "/", 3)
+	if len(parts) < 2 {
+		return "", false
+	}
+	return parts[0] + "/" + parts[1], true
 }
 
 // ActiveDemands is the Demand of every active scenario other than except,

@@ -35,6 +35,11 @@ components:
     type: helm
     chart: grafana/loki
     namespace: "{{.MonitoringNamespace}}"
+  - name: promtail
+    type: helm
+    chart: grafana/promtail
+    platformValues: logging/loki/promtail-values.yaml
+    adopt: true
   - name: seed
     type: script
     script: seed.sh
@@ -56,13 +61,37 @@ func TestEngine_Demand(t *testing.T) {
 	expectedItems := []capacity.Item{
 		{Kind: capacity.ItemPlatform, Name: "data/kafka"},
 		{Kind: capacity.ItemRelease, Name: "observability/loki"},
+		{Kind: capacity.ItemPlatform, Name: "logging/loki"},
 		{Kind: capacity.ItemApp, Name: "go-api"},
 	}
 	if !slices.Equal(got.Items, expectedItems) {
-		t.Errorf("Items = %v, want %v (baseline platform and non-helm components excluded)", got.Items, expectedItems)
+		t.Errorf("Items = %v, want %v (baseline platform and non-helm components excluded, adopted release as its platform component)", got.Items, expectedItems)
 	}
 	if got.OwnMiB != 300 || got.Agents != 2 || got.CPUs != 4 || got.App != "go-api" {
 		t.Errorf("Demand = %+v", got)
+	}
+}
+
+func TestAdoptedFrom(t *testing.T) {
+	tests := []struct {
+		name     string
+		comp     Component
+		expected string
+		ok       bool
+	}{
+		{name: "component directory", comp: Component{Adopt: true, PlatformValues: "tracing/tempo"}, expected: "tracing/tempo", ok: true},
+		{name: "file inside it", comp: Component{Adopt: true, PlatformValues: "logging/loki/promtail-values.yaml"}, expected: "logging/loki", ok: true},
+		{name: "not adopted", comp: Component{PlatformValues: "tracing/tempo"}},
+		{name: "no platform values", comp: Component{Adopt: true}},
+		{name: "bare category", comp: Component{Adopt: true, PlatformValues: "mesh"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, ok := adoptedFrom(&tt.comp)
+			if got != tt.expected || ok != tt.ok {
+				t.Errorf("adoptedFrom = %q, %v; want %q, %v", got, ok, tt.expected, tt.ok)
+			}
+		})
 	}
 }
 
@@ -170,6 +199,45 @@ components:
 			}
 			if got := len(rec.calls) > 0; got != tt.wantInstall {
 				t.Errorf("components installed = %v, want %v", got, tt.wantInstall)
+			}
+		})
+	}
+}
+
+func TestEngine_Down_CallsRelease(t *testing.T) {
+	tests := []struct {
+		name       string
+		releaseErr error
+		wantOutput string
+	}{
+		{name: "released"},
+		{name: "a failed release is a warning", releaseErr: errors.New("drain failed"), wantOutput: "Warning: drain failed"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			root := t.TempDir()
+			writeScenario(t, root, "drill", "name: drill\ndisplayName: Drill\ndescription: x\ncategory: testing\n")
+			eng := NewEngine(root, "k3d.local", "k3d", "monitoring")
+			var out strings.Builder
+			eng.SetOutput(&out)
+			if err := eng.markActive("drill", nil); err != nil {
+				t.Fatal(err)
+			}
+			var remaining []capacity.Demand
+			called := false
+			eng.Release = func(_ context.Context, r []capacity.Demand) error {
+				called, remaining = true, r
+				return tt.releaseErr
+			}
+
+			if err := eng.Down("drill", &recordingExec{}); err != nil {
+				t.Fatalf("Down: %v", err)
+			}
+			if !called || len(remaining) != 0 {
+				t.Errorf("Release called = %v with %v, want called with no remaining scenarios", called, remaining)
+			}
+			if !strings.Contains(out.String(), tt.wantOutput) {
+				t.Errorf("output should mention %q:\n%s", tt.wantOutput, out.String())
 			}
 		})
 	}

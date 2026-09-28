@@ -17,6 +17,10 @@ prerequisites:
     - prometheus-metrics
     - otlp-tracing
     - readiness-toggle
+# Memory for this scenario's own workloads; shared releases, platform
+# components and apps are counted from config/footprints.yaml.
+requirements:
+  memory: 450Mi
 runtimes:
   - k3d
   - kind

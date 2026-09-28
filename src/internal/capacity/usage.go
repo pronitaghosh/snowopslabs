@@ -3,10 +3,11 @@
 package capacity
 
 import (
+	"bufio"
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
-	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -14,8 +15,25 @@ import (
 	"github.com/sagar2395/snowopslabs/internal/toolchain"
 )
 
-// Usage is the memory, in MiB, used now by the containers carrying label (for
-// example "k3d.cluster=snowops"): the lab's live footprint.
+// NodeLabel is the Docker label that selects a local cluster's node
+// containers, and false for a runtime with none (incluster).
+func NodeLabel(profile, cluster string) (string, bool) {
+	switch profile {
+	case "k3d":
+		return "k3d.cluster=" + cluster, true
+	case "kind":
+		return "io.x-k8s.kind.cluster=" + cluster, true
+	default:
+		return "", false
+	}
+}
+
+// Usage is the memory, in MiB, in use on the machine that runs the lab's
+// containers: the Docker VM, or the host itself on native Linux. It is
+// MemTotal minus MemAvailable from that machine's /proc/meminfo, read through
+// one of the containers carrying label (e.g. "k3d.cluster=snowops"), so
+// reclaimable page cache does not count and other workloads on the machine do.
+// It returns 0 when the lab has no running container.
 func Usage(ctx context.Context, runner toolchain.Runner, label string) (int, error) {
 	docker, err := runner.LookPath("docker")
 	if err != nil {
@@ -37,51 +55,41 @@ func Usage(ctx context.Context, runner toolchain.Runner, label string) (int, err
 		return 0, nil
 	}
 
-	var stats bytes.Buffer
-	args := append([]string{"stats", "--no-stream", "--format", "{{.MemUsage}}"}, containers...)
-	if _, err := runner.Run(ctx, toolchain.Command{Path: docker, Args: args, Stdout: &stats}); err != nil {
-		return 0, fmt.Errorf("reading the lab's memory use: %w", err)
+	var meminfo bytes.Buffer
+	if _, err := runner.Run(ctx, toolchain.Command{
+		Path:   docker,
+		Args:   []string{"exec", containers[0], "cat", "/proc/meminfo"},
+		Stdout: &meminfo,
+	}); err != nil {
+		return 0, fmt.Errorf("reading the Docker machine's memory: %w", err)
 	}
-	total := 0.0
-	for line := range strings.Lines(stats.String()) {
-		used, _, _ := strings.Cut(line, "/")
-		mib, err := parseDockerMemory(strings.TrimSpace(used))
-		if err != nil {
-			return 0, err
-		}
-		total += mib
-	}
-	return int(math.Ceil(total)), nil
+	return usedMiB(meminfo.String())
 }
 
-// parseDockerMemory reads a size as `docker stats` prints it ("973.1MiB",
-// "1.2GiB", "512KiB", "0B") and returns MiB.
-func parseDockerMemory(s string) (float64, error) {
-	for _, u := range dockerMemoryUnits {
-		num, ok := strings.CutSuffix(s, u.suffix)
+// usedMiB reads MemTotal and MemAvailable (in kB) from /proc/meminfo and
+// returns the difference in MiB.
+func usedMiB(meminfo string) (int, error) {
+	fields := map[string]int64{}
+	sc := bufio.NewScanner(strings.NewReader(meminfo))
+	for sc.Scan() {
+		key, rest, ok := strings.Cut(sc.Text(), ":")
 		if !ok {
 			continue
 		}
-		v, err := strconv.ParseFloat(num, 64)
-		if err != nil {
-			return 0, fmt.Errorf("parsing memory %q from docker stats: %w", s, err)
+		value := strings.Fields(rest)
+		if len(value) == 0 {
+			continue
 		}
-		return v * u.mib, nil
+		kb, err := strconv.ParseInt(value[0], 10, 64)
+		if err != nil {
+			continue
+		}
+		fields[key] = kb
 	}
-	return 0, fmt.Errorf("unexpected memory %q from docker stats", s)
-}
-
-// dockerMemoryUnits maps `docker stats` suffixes to MiB. Longer suffixes come
-// first so "MiB" is not read as "B".
-var dockerMemoryUnits = []struct {
-	suffix string
-	mib    float64
-}{
-	{suffix: "GiB", mib: 1024},
-	{suffix: "MiB", mib: 1},
-	{suffix: "KiB", mib: 1.0 / 1024},
-	{suffix: "GB", mib: 1e9 / (1 << 20)},
-	{suffix: "MB", mib: 1e6 / (1 << 20)},
-	{suffix: "kB", mib: 1e3 / (1 << 20)},
-	{suffix: "B", mib: 1.0 / (1 << 20)},
+	total, hasTotal := fields["MemTotal"]
+	available, hasAvailable := fields["MemAvailable"]
+	if !hasTotal || !hasAvailable {
+		return 0, errors.New("/proc/meminfo has no MemTotal or MemAvailable")
+	}
+	return int((total - available) / 1024), nil
 }

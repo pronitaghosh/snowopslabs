@@ -32,6 +32,8 @@ type Config struct {
 	// never shrink one the user already runs.
 	LabCPUs   string
 	LabMemory string
+	// Agents is the number of agent nodes the cluster starts with.
+	Agents string
 
 	// Runtime-specific
 	IngressClass        string
@@ -145,6 +147,7 @@ func Load(projectRoot string) (*Config, error) {
 	cfg.HTTPSPort = resolveEnv(fileVals, "HTTPS_PORT", "443")
 	cfg.LabCPUs = resolveEnv(fileVals, "LAB_CPUS", "2")
 	cfg.LabMemory = resolveEnv(fileVals, "LAB_MEMORY", "4")
+	cfg.Agents = resolveEnv(fileVals, "AGENTS", "1")
 
 	cfg.IngressClass = resolveEnv(fileVals, "INGRESS_CLASS", "traefik")
 	cfg.StorageClass = resolveEnv(fileVals, "STORAGE_CLASS", "local-path")

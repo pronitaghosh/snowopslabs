@@ -2,24 +2,30 @@
 
 package cli
 
-import "testing"
+import (
+	"testing"
 
-func TestNodeContainerLabel(t *testing.T) {
+	"github.com/sagar2395/snowopslabs/internal/config"
+)
+
+func TestConfiguredAgents(t *testing.T) {
+	oldCfg := cfg
+	t.Cleanup(func() { cfg = oldCfg })
 	tests := []struct {
 		name     string
-		profile  string
-		expected string
-		ok       bool
+		input    string
+		expected int
 	}{
-		{name: "k3d", profile: "k3d", expected: "k3d.cluster=lab", ok: true},
-		{name: "kind", profile: "kind", expected: "io.x-k8s.kind.cluster=lab", ok: true},
-		{name: "incluster has no node containers", profile: "incluster", expected: "", ok: false},
+		{name: "set", input: "2", expected: 2},
+		{name: "unset", input: "", expected: 1},
+		{name: "not a number", input: "two", expected: 1},
+		{name: "negative", input: "-1", expected: 1},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, ok := nodeContainerLabel(tt.profile, "lab")
-			if got != tt.expected || ok != tt.ok {
-				t.Errorf("nodeContainerLabel(%q) = %q, %v; want %q, %v", tt.profile, got, ok, tt.expected, tt.ok)
+			cfg = &config.Config{Agents: tt.input}
+			if got := configuredAgents(); got != tt.expected {
+				t.Errorf("configuredAgents() = %d, want %d", got, tt.expected)
 			}
 		})
 	}

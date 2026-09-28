@@ -6,6 +6,7 @@ import type { ClusterInfo, NotifyFn, PlatformProviderEntry } from '../types'
 import { Badge } from '../components/Badge'
 import { ErrorState } from '../components/ErrorState'
 import { Icon } from '../components/Icon'
+import { DockerCard } from '../components/DockerCard'
 import { useJobRunner } from '../hooks/useJobRunner'
 import type { ConfirmRequest } from '../components/ConfirmDialog'
 
@@ -28,12 +29,15 @@ export function Dashboard({ notify, liveCluster, lastStatusAt, requestConfirm }:
   // cache key as the Platform tab, so both reflect the same cluster-derived state.
   const statusQ = useApiQuery(qk.status, api.getStatus, { refetchInterval: 30_000 })
   const platformQ = useApiQuery(qk.platform, api.getPlatform, { refetchInterval: 30_000 })
+  // Without a local Docker engine (incluster) or while Docker is down the
+  // request fails, and the Docker card is left out.
+  const capacityQ = useApiQuery(qk.capacity, api.getCapacity, { refetchInterval: 30_000 })
   const status = statusQ.data ?? null
   const providers = platformQ.data ?? {}
   const loading = statusQ.loading
   const loadError = statusQ.loadError
   const refreshing = statusQ.refreshing || platformQ.refreshing
-  const load = () => { statusQ.reload(); platformQ.reload() }
+  const load = () => { statusQ.reload(); platformQ.reload(); capacityQ.reload() }
   const { busy, run } = useJobRunner(notify)
 
   if (loading) {
@@ -110,6 +114,8 @@ export function Dashboard({ notify, liveCluster, lastStatusAt, requestConfirm }:
             </div>
           )}
         </div>
+
+        {capacityQ.data && <DockerCard capacity={capacityQ.data} />}
 
         {/* Platform components card — read-only summary of what's installed. */}
         <div className="card full-width">

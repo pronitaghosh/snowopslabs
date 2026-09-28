@@ -30,15 +30,23 @@ type Gate struct {
 	UsageLabel string
 	// CanAddAgents reports whether the runtime can add agent nodes live.
 	CanAddAgents bool
+	// MinAgents is the agent count the cluster was created with; Release never
+	// shrinks below it.
+	MinAgents int
 
 	// Active returns the Demand of every active scenario except the named one.
 	Active func(except string) []capacity.Demand
 	// Running reports whether item already runs in the lab.
 	Running func(ctx context.Context, item capacity.Item) bool
+	// Installed lists the platform components installed beyond the baseline.
+	Installed func(ctx context.Context) []capacity.Item
 	// Agents returns the cluster's current agent count.
 	Agents func(ctx context.Context) (int, error)
 	// AddAgents grows the cluster to total agent nodes.
 	AddAgents func(ctx context.Context, total int) error
+	// RemoveAgents shrinks the cluster towards total agent nodes, removing only
+	// agents AddAgents created and keeping any it cannot remove safely.
+	RemoveAgents func(ctx context.Context, total int) error
 }
 
 // Admit evaluates next against the lab. It writes warnings to out, adds any
@@ -56,7 +64,9 @@ func (g *Gate) Admit(ctx context.Context, out io.Writer, next capacity.Demand) e
 		return err
 	}
 
-	v := capacity.Evaluate(g.Footprints, lab, g.Active(next.Name), next)
+	active := g.Active(next.Name)
+	lab.Installed = g.Installed(ctx)
+	v := capacity.Evaluate(g.Footprints, lab, active, next)
 	for _, w := range v.Warnings {
 		fmt.Fprintf(out, "Warning: %s\n", w)
 	}
@@ -69,6 +79,30 @@ func (g *Gate) Admit(ctx context.Context, out io.Writer, next capacity.Demand) e
 		if err := g.AddAgents(ctx, total); err != nil {
 			return fmt.Errorf("adding agent nodes: %w", err)
 		}
+	}
+	return nil
+}
+
+// Release shrinks the cluster to the most agent nodes any remaining demand
+// needs, but not below MinAgents, so agents added for a drill do not outlive
+// it.
+func (g *Gate) Release(ctx context.Context, remaining []capacity.Demand) error {
+	if !g.CanAddAgents || g.RemoveAgents == nil {
+		return nil
+	}
+	need := g.MinAgents
+	for _, d := range remaining {
+		need = max(need, d.Agents)
+	}
+	have, err := g.Agents(ctx)
+	if err != nil {
+		return fmt.Errorf("counting agent nodes: %w", err)
+	}
+	if have <= need {
+		return nil
+	}
+	if err := g.RemoveAgents(ctx, need); err != nil {
+		return fmt.Errorf("removing agent nodes: %w", err)
 	}
 	return nil
 }

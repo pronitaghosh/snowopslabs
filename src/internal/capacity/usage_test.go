@@ -9,6 +9,34 @@ import (
 	"github.com/sagar2395/snowopslabs/internal/toolchain"
 )
 
+const meminfo4GB = `MemTotal:        3998720 kB
+MemFree:          137216 kB
+MemAvailable:    2032640 kB
+Buffers:           10240 kB
+Cached:          2086912 kB
+`
+
+func TestNodeLabel(t *testing.T) {
+	tests := []struct {
+		name     string
+		profile  string
+		expected string
+		ok       bool
+	}{
+		{name: "k3d", profile: "k3d", expected: "k3d.cluster=lab", ok: true},
+		{name: "kind", profile: "kind", expected: "io.x-k8s.kind.cluster=lab", ok: true},
+		{name: "incluster has no node containers", profile: "incluster", expected: "", ok: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, ok := NodeLabel(tt.profile, "lab")
+			if got != tt.expected || ok != tt.ok {
+				t.Errorf("NodeLabel(%q) = %q, %v; want %q, %v", tt.profile, got, ok, tt.expected, tt.ok)
+			}
+		})
+	}
+}
+
 func TestUsage(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -17,16 +45,16 @@ func TestUsage(t *testing.T) {
 		wantErr  bool
 	}{
 		{
-			name: "sums every lab container",
+			name: "total minus available on the docker machine",
 			fake: func() *toolchain.Fake {
 				return toolchain.NewFake().
-					WhenArgsContain("ps -q", "aaa\nbbb\nccc\n", 0).
-					WhenArgsContain("stats", "973.1MiB / 3.814GiB\n1.2GiB / 3.814GiB\n512KiB / 3.814GiB\n", 0)
+					WhenArgsContain("ps -q", "server\nagent\n", 0).
+					WhenArgsContain("exec server cat /proc/meminfo", meminfo4GB, 0)
 			},
-			expected: 2203,
+			expected: 1920,
 		},
 		{
-			name: "no containers uses nothing",
+			name: "no running lab container uses nothing",
 			fake: func() *toolchain.Fake {
 				return toolchain.NewFake().WhenArgsContain("ps -q", "", 0)
 			},
@@ -40,11 +68,11 @@ func TestUsage(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "unreadable stats are an error",
+			name: "an unreadable meminfo is an error",
 			fake: func() *toolchain.Fake {
 				return toolchain.NewFake().
-					WhenArgsContain("ps -q", "aaa\n", 0).
-					WhenArgsContain("stats", "lots / 4GiB\n", 0)
+					WhenArgsContain("ps -q", "server\n", 0).
+					WhenArgsContain("exec", "", 1)
 			},
 			wantErr: true,
 		},
@@ -72,28 +100,25 @@ func TestUsage(t *testing.T) {
 	}
 }
 
-func TestParseDockerMemory(t *testing.T) {
+func TestUsedMiB(t *testing.T) {
 	tests := []struct {
 		name     string
 		input    string
-		expected float64
+		expected int
 		wantErr  bool
 	}{
-		{name: "mebibytes", input: "973.5MiB", expected: 973.5},
-		{name: "gibibytes", input: "1.5GiB", expected: 1536},
-		{name: "kibibytes", input: "512KiB", expected: 0.5},
-		{name: "zero bytes", input: "0B", expected: 0},
-		{name: "no unit", input: "973", wantErr: true},
-		{name: "not a number", input: "xMiB", wantErr: true},
+		{name: "meminfo", input: meminfo4GB, expected: 1920},
+		{name: "no memavailable", input: "MemTotal: 3998720 kB\n", wantErr: true},
+		{name: "garbage lines are skipped", input: "junk\nMemTotal: 2048 kB\nMemAvailable: x kB\nMemAvailable: 1024 kB\n", expected: 1},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := parseDockerMemory(tt.input)
+			got, err := usedMiB(tt.input)
 			if (err != nil) != tt.wantErr {
 				t.Fatalf("error = %v, wantErr %v", err, tt.wantErr)
 			}
 			if got != tt.expected {
-				t.Errorf("parseDockerMemory(%q) = %v, want %v", tt.input, got, tt.expected)
+				t.Errorf("usedMiB = %d, want %d", got, tt.expected)
 			}
 		})
 	}

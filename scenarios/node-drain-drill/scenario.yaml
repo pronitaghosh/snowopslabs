@@ -13,6 +13,7 @@ prerequisites:
 # Draining a worker needs a second one to move the pods to. labctl adds the
 # agent when the drill starts, if Docker has room for it.
 requirements:
+  memory: 100Mi
   agents: 2
 runtimes:
   - k3d
