@@ -18,10 +18,19 @@ Resources.
 
 ## Install and build the lab
 
+Clone the latest release wherever you keep projects, then install the matching
+`labctl` and build the lab:
+
 ```bash
-curl -fsSL https://raw.githubusercontent.com/sagar2395/snowopslabs/main/install.sh | sh
+git clone --branch stable https://github.com/sagar2395/snowopslabs.git
+cd snowopslabs
+./install.sh
 labctl init
 ```
+
+`git` comes with Apple's Command Line Tools; if they are missing, the first
+`git` command offers to install them. `install.sh` puts `labctl` in
+`~/.local/bin` and records your clone, so `labctl` works from any directory.
 
 `init` installs `kubectl`, `helm`, `k3d`, `colima`, `docker` and
 `docker-buildx` with Homebrew (a tool you already have at a new enough version
@@ -35,7 +44,7 @@ labctl hosts add           # optional: open Grafana & co. by name (asks for sudo
 
 ## Giving colima more memory
 
-Set the size in `~/.snowops/lab/.env`; `labctl init` starts a *stopped* colima
+Set the size in `.env` in your clone; `labctl init` starts a *stopped* colima
 at that size, and never shrinks it:
 
 ```bash
@@ -62,7 +71,7 @@ your apps and scenarios.
 ```bash
 labctl teardown
 labctl hosts remove                  # if you ran `labctl hosts add`
-rm -rf ~/.snowops ~/.local/bin/labctl
+rm -rf ~/.snowops ~/.local/bin/labctl   # and your clone, when you no longer need it
 colima delete --data                 # removes the VM and every image in it
 ```
 

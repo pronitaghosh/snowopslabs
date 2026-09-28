@@ -109,9 +109,11 @@ Every script test asserts at minimum:
 ## The onboarding job
 
 `.github/workflows/onboarding.yaml` runs the new-user path on a fresh Ubuntu
-runner, on every PR that touches it and nightly: it builds a release snapshot
-with goreleaser, installs it with `install.sh`, and runs `labctl doctor`,
-`labctl init` and a scenario from the home directory, outside any checkout.
+runner, on every PR that touches it and nightly: the checkout stands in for a
+learner's clone. It builds a release snapshot with goreleaser, runs the clone's
+`./install.sh` against it, and runs `labctl doctor`, `labctl init` and a
+scenario from the home directory, so labctl must find the clone install.sh
+recorded.
 macOS and WSL2 cannot run there, so
 [R14](runbooks/R14-fresh-machine-onboarding.md) covers them by hand.
 

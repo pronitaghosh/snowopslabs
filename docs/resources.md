@@ -87,7 +87,7 @@ how much of the memory the lab may use is taken.
 
 | Setup | How |
 |---|---|
-| colima (macOS) | `colima stop && colima start --cpu 4 --memory 8`, then `labctl init`. To have `init` start it at that size next time, set `LAB_CPUS` and `LAB_MEMORY` in `~/.snowops/lab/.env`. |
+| colima (macOS) | `colima stop && colima start --cpu 4 --memory 8`, then `labctl init`. To have `init` start it at that size next time, set `LAB_CPUS` and `LAB_MEMORY` in `.env` in your clone. |
 | Docker Desktop (macOS) | Settings → Resources → CPUs and Memory → Apply & Restart. |
 | WSL2 (Docker Desktop or Docker Engine) | In `%UserProfile%\.wslconfig` set `memory=` and `processors=` under `[wsl2]`, then `wsl --shutdown` in PowerShell. |
 | Linux | Docker uses the machine's own memory; close memory-hungry programs. |

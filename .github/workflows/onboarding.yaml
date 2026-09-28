@@ -1,10 +1,11 @@
 # Fresh-machine onboarding on Linux: the path a new user takes, end to end.
 #
-# It builds a release the way the release workflow does (goreleaser, content
-# included), installs it with install.sh from that local build, then runs the
-# README's first-lab steps from the home directory, outside any checkout:
-# doctor, init (tools, Docker preflight, cluster, platform, health gate), a
-# scenario with --deploy-prereqs, status and teardown.
+# The checkout stands in for the user's clone. It builds labctl the way the
+# release workflow does (goreleaser), runs the clone's ./install.sh against that
+# local build, then runs the README's first-lab steps from the home directory,
+# outside the clone, so labctl must find the lab install.sh recorded: doctor,
+# init (tools, Docker preflight, cluster, platform, health gate), a scenario
+# with --deploy-prereqs, status and teardown.
 name: onboarding
 
 on:
@@ -16,7 +17,6 @@ on:
       - config/**
       - platform/ingress/**
       - platform/monitoring/**
-      - scripts/stage-release-content.sh
       - src/.goreleaser.yaml
       - src/internal/capacity/**
       - src/internal/config/**
@@ -70,12 +70,14 @@ jobs:
           cp "$archive" src/dist/checksums.txt "rel/download/v${version}/"
           echo "version=${version}" >> "$GITHUB_OUTPUT"
 
-      - name: Install with install.sh
+      # SNOWOPS_VERSION names the snapshot, since LAB_VERSION on a branch is
+      # development content with no release to download.
+      - name: Install with the clone's install.sh
         env:
           SNOWOPS_RELEASE_URL: file://${{ github.workspace }}/rel
           SNOWOPS_VERSION: ${{ steps.release.outputs.version }}
         run: |
-          sh install.sh
+          ./install.sh
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - name: labctl doctor

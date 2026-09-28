@@ -15,15 +15,20 @@ distro's terminal (Ubuntu is recommended), never in PowerShell.
 
 ## Keep the lab on the Linux filesystem
 
-Work in your Linux home directory (`~`), not under `/mnt/c`. Windows drives are
-much slower from WSL, and a checkout there can get Windows line endings, which
-break every shell script. The installer already puts the lab in
-`~/.snowops/lab`.
+Clone in your Linux home directory (`cd ~`), not under `/mnt/c`, and with the
+distro's `git`, not Git for Windows. Windows drives are much slower from WSL,
+and a checkout made from Windows can get Windows line endings, which break
+every shell script. `labctl doctor` warns when your lab is on a Windows drive.
 
 ## Install and build the lab
 
+In your distro's terminal:
+
 ```bash
-curl -fsSL https://raw.githubusercontent.com/sagar2395/snowopslabs/main/install.sh | sh
+cd ~
+git clone --branch stable https://github.com/sagar2395/snowopslabs.git
+cd snowopslabs
+./install.sh
 labctl init
 ```
 
@@ -68,5 +73,5 @@ restarts the cluster in order and keeps your apps and scenarios.
 
 ```bash
 labctl teardown
-rm -rf ~/.snowops ~/.local/bin/labctl
+rm -rf ~/.snowops ~/.local/bin/labctl   # and your clone, when you no longer need it
 ```

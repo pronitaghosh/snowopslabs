@@ -6,16 +6,20 @@ runs scenarios, injects faults and grades your fix.
 ## Install
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/sagar2395/snowopslabs/main/install.sh | sh
+git clone --branch stable https://github.com/sagar2395/snowopslabs.git
+cd snowopslabs && ./install.sh
 ```
 
-The installer puts `labctl` in `~/.local/bin` and the lab content in
-`~/.snowops/lab`, with no sudo; re-run it to upgrade. Set `SNOWOPS_VERSION` for
-a specific release. The per-OS guides are under
-[Getting started](../../getting-started/macos.md).
+`install.sh` puts the `labctl` release named by the clone's `LAB_VERSION` in
+`~/.local/bin`, with no sudo, and records the clone in `~/.snowops/lab-dir`.
+Re-run it after upgrading the clone (`git merge origin/stable`). The per-OS
+guides are under [Getting started](../../getting-started/macos.md).
 
-Outside a checkout, `labctl` uses the installed lab; inside a checkout it uses
-the checkout's content. `--project-dir` chooses explicitly.
+`labctl` finds the lab in this order: `--project-dir`; the clone around the
+working directory; `SNOWOPS_LAB_DIR`; the recorded clone. Lab state (active
+scenarios and faults, history, progress, snapshots, users) is kept per cluster
+in `~/.snowops/state/<cluster>/` (`SNOWOPS_HOME` moves `~/.snowops`). State an
+older labctl kept in the clone's `.labctl/` is moved there on first use.
 
 **Build from source** (contributors) — needs Go 1.25+ and Node 22+; see
 [CONTRIBUTING](../../../CONTRIBUTING.md#development-setup):
@@ -28,7 +32,7 @@ make cli-build        # builds bin/labctl with the UI embedded
 
 | Flag | Default | Description |
 |---|---|---|
-| `--project-dir` | auto-detected | The lab content to use: a checkout, or the installed `~/.snowops/lab` |
+| `--project-dir` | auto-detected | The lab (a snowopslabs clone) to use; see [Install](#install) for how it is found otherwise |
 | `-v, --verbose` | `false` | Debug logging: config load, script exec, API calls |
 | `--version` | — | Print the build version |
 

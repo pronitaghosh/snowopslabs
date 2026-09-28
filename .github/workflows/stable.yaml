@@ -1,0 +1,32 @@
+# Stable — move the `stable` branch to each published release.
+#
+# Users clone `--branch stable` and upgrade by merging origin/stable, so the
+# branch must always be the latest published (non-pre-)release. It moves when a
+# draft Release is published, not when the tag is pushed, so a release is only
+# offered once the maintainer has reviewed it. The push is a fast-forward; a
+# release that does not descend from the current stable (a hotfix of an older
+# line) fails here and is moved by hand. See RELEASING.md.
+name: Stable
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write # push the stable branch
+
+jobs:
+  stable:
+    name: move stable to the release
+    if: ${{ !github.event.release.prerelease }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fast-forward stable to the release tag
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          git push origin "refs/tags/${TAG}^{commit}:refs/heads/stable"

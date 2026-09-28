@@ -12,13 +12,22 @@ installs Docker for you.
   the lab uses the host's memory; close memory-hungry programs if you are
   short ([Resources](../resources.md)).
 - **About 10 GB of free disk.**
+- **git** (`sudo apt install git` or your distro's equivalent).
 
 ## Install and build the lab
 
+Clone the latest release wherever you keep projects, then install the matching
+`labctl` and build the lab:
+
 ```bash
-curl -fsSL https://raw.githubusercontent.com/sagar2395/snowopslabs/main/install.sh | sh
+git clone --branch stable https://github.com/sagar2395/snowopslabs.git
+cd snowopslabs
+./install.sh
 labctl init
 ```
+
+`install.sh` puts `labctl` in `~/.local/bin` and records your clone, so
+`labctl` works from any directory.
 
 `init` downloads `kubectl`, `helm` and `k3d` into `~/.local/bin` (no sudo; a
 tool you already have at a new enough version is left alone) and prints the
@@ -53,5 +62,5 @@ order and wait until it is healthy; your apps and scenarios are kept.
 ```bash
 labctl teardown
 labctl hosts remove                  # if you ran `labctl hosts add`
-rm -rf ~/.snowops ~/.local/bin/labctl
+rm -rf ~/.snowops ~/.local/bin/labctl   # and your clone, when you no longer need it
 ```

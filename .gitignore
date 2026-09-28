@@ -21,9 +21,6 @@ coverage.out
 coverage.html
 .coverage-func.txt
 
-## Release content staged by scripts/stage-release-content.sh for goreleaser
-src/content/
-
 ## Embedded UI in the binary (copied at build time by make cli-build)
 src/internal/webui/dist/*
 !src/internal/webui/dist/.gitkeep

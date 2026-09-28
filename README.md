@@ -125,23 +125,24 @@ Your OS in detail: [macOS](docs/getting-started/macos.md) ·
 
 ## Install
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/sagar2395/snowopslabs/main/install.sh | sh
-```
-
-This puts `labctl` in `~/.local/bin` and the lab (scenarios, platform
-components, scripts) in `~/.snowops/lab`. It needs no sudo, verifies the
-download's checksum, and re-running it upgrades both. It prints the line to add
-to your shell profile if `~/.local/bin` is not on your `PATH` yet.
-
-You don't need to clone this repository: every `labctl` command works from any
-directory and uses the lab in `~/.snowops/lab`.
-
-To install a specific release, set `SNOWOPS_VERSION`:
+Your lab is a clone of this repository: every manifest, Helm values file,
+scenario and incident is a file you can open, read and change. Clone the latest
+release anywhere you like, then run its installer:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/sagar2395/snowopslabs/main/install.sh | SNOWOPS_VERSION=1.5.0 sh
+git clone --branch stable https://github.com/sagar2395/snowopslabs.git
+cd snowopslabs
+./install.sh
 ```
+
+`stable` always points at the latest release; to pin one, clone with
+`--branch v1.5.0` instead. `install.sh` downloads the `labctl` binary that
+matches your clone into `~/.local/bin`, verifies its checksum and needs no sudo.
+It also records where your clone is, so `labctl` works from any directory. It
+prints the line to add to your shell profile if `~/.local/bin` is not on your
+`PATH` yet.
+
+On Windows, clone inside WSL2, in your Linux home (`cd ~`), not under `/mnt/c`.
 
 ## Your first lab
 
@@ -182,6 +183,29 @@ labctl incident status                       # hints and whether it is resolved
 
 The cluster is yours: `kubectl` and `helm` work against it directly.
 
+## Experiment with the lab
+
+Open your clone in your editor. What a scenario installs is in
+`scenarios/<name>/` (manifests, scripts, checks), each platform component's
+Helm values in `platform/<category>/<provider>/values.yaml`, and each fault in
+`incidents/<name>/`. `labctl scenario info <name>` lists what a scenario uses.
+
+Work on a branch of your own, so upgrades merge cleanly and you can always get
+back to the original:
+
+```bash
+git switch -c my-experiments
+```
+
+| You want to… | Do |
+|---|---|
+| Try a change on the live cluster | `kubectl edit` / `kubectl apply`; `labctl scenario down` then `up` puts the scenario back |
+| Change how something is built | Edit its manifest or values file, then `labctl platform up <component>` or `labctl scenario up <name>` |
+| See what you changed | `git diff` |
+| Undo it | `git restore .`, then `labctl reset` if the cluster needs rebuilding |
+| Keep it | `git commit` |
+| Check your edits are valid | `labctl validate` |
+
 To open Grafana, Prometheus and the apps by name in your browser, add their
 hostnames to `/etc/hosts` once (asks for sudo). The dashboard doesn't need it:
 
@@ -197,8 +221,22 @@ labctl hosts add
 | See what is running and whether it is healthy | `labctl status` (or the dashboard) |
 | Run several scenarios at once | Start them one after another; labctl stops you, with the fix, if Docker has no room left |
 | Start again from a clean cluster | `labctl reset` |
-| Upgrade | Re-run the install command above |
+| Upgrade | See [Upgrade](#upgrade) below |
 | Check your machine | `labctl doctor` |
+
+### Upgrade
+
+From your clone, on your own branch:
+
+```bash
+git fetch origin
+git merge origin/stable      # your changes are kept; git stops on a conflict
+./install.sh                 # the labctl that matches
+```
+
+If you have uncommitted changes, commit or stash them first. When labctl and
+your clone come from different releases, every command says so and prints the
+fix.
 
 ### Uninstall
 
@@ -206,8 +244,13 @@ labctl hosts add
 labctl teardown                      # delete the cluster
 labctl hosts remove                  # if you ran `labctl hosts add`
 rm -rf ~/.snowops ~/.local/bin/labctl
+rm -rf snowopslabs                   # your clone, once you no longer need your changes
 colima delete --data                 # macOS only, if you no longer need colima's VM and its images
 ```
+
+`~/.snowops` holds labctl's state for the cluster (active scenarios, history,
+progress); it lives outside your clone, so deleting or re-cloning the lab
+loses none of it.
 
 ## When something goes wrong
 
@@ -220,12 +263,15 @@ The errors say what to do. The common ones:
 | `Not enough memory for <scenario>` | Run the commands it prints to free memory (bring a scenario down, remove components nothing uses), or resize Docker as printed. |
 | URLs end in `:8080` | Something else already uses port 80, so the lab moved to 8080. Every URL and check follows it. |
 | `no such host` for `*.k3d.local` | Run `labctl hosts add`. |
+| `could not find your lab` | Run `./install.sh` in your clone once, or `cd` into it. |
+| `labctl is X but the lab in … is Y` | Run `./install.sh` in your clone. |
 
 Everything else, by symptom: [Troubleshooting](docs/troubleshooting.md).
 
 ## Configuration
 
-`labctl` reads `~/.snowops/lab/.env` (or `.env` in a checkout):
+`labctl` reads `.env` in your clone (`install.sh` creates it from
+`config/.env.example`):
 
 ```bash
 LAB_CPUS=2          # size colima is started at (macOS)

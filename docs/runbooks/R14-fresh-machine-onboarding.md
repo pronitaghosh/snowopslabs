@@ -39,6 +39,10 @@ $ cp src/dist/labctl_<version>_darwin_arm64.tar.gz src/dist/checksums.txt /tmp/n
 $ export SNOWOPS_RELEASE_URL=file:///tmp/newuser/rel SNOWOPS_VERSION=<version>
 ```
 
+and clone the branch under test instead of `stable` in step 1
+(`--branch <branch>`); `SNOWOPS_VERSION` lets `install.sh` accept its `-dev`
+`LAB_VERSION`.
+
 ### WSL2: a fresh distro
 
 In PowerShell: `wsl --install -d Ubuntu-24.04 --name snowops-test`, then open
@@ -47,15 +51,20 @@ it. Run the runbook twice: once with Docker Desktop's WSL Integration off (so
 
 ---
 
-## 1. Install
+## 1. Clone and install
+
+In a directory of your choice (on WSL: `cd ~` first):
 
 ```bash
-$ curl -fsSL https://raw.githubusercontent.com/sagar2395/snowopslabs/main/install.sh | sh
+$ git clone --branch stable https://github.com/sagar2395/snowopslabs.git
+$ cd snowopslabs && ./install.sh
+$ cd ~ && labctl scenario list | head -3     # works outside the clone
 ```
 
-**Expect:** `Installed labctl <version> to ~/.local/bin/labctl and the lab to
-~/.snowops/lab`, a PATH hint if `~/.local/bin` is not on your `PATH`, and the
-next steps. No password prompt.
+**Expect:** `Installed labctl <version> to ~/.local/bin/labctl`, `Your lab is
+<path to the clone>`, a PATH hint if `~/.local/bin` is not on your `PATH`, and
+the next steps. No password prompt. `~/.snowops/lab-dir` holds the clone's
+path, and `scenario list` works from `~`.
 
 ## 2. Doctor on an empty machine
 
@@ -132,8 +141,11 @@ time).
 
 ## 7. Upgrade and uninstall ⚠️
 
-Re-run the install command. **Expect:** the same URLs work, `.env` edits are
-kept, active scenarios are still listed.
+On a branch of your own, edit a values file and commit it, then upgrade as the
+README says (`git fetch origin && git merge origin/stable && ./install.sh`).
+**Expect:** your commit is kept, the same URLs work, `.env` edits are kept,
+active scenarios are still listed (state is in `~/.snowops/state/<cluster>/`,
+not the clone), and no command prints a version warning.
 
 Then follow the README's *Uninstall* section. **Expect:** no `labctl`, no
 `~/.snowops`, no lab containers (`docker ps -a`), and on macOS no colima VM.
@@ -144,12 +156,12 @@ Then follow the README's *Uninstall* section. **Expect:** no `labctl`, no
 
 | Step | macOS | WSL (Docker Desktop) | WSL (Docker Engine) |
 |---|---|---|---|
-| 1. Install without sudo | | | |
+| 1. Clone + install without sudo; works outside the clone | | | |
 | 2. Doctor explains the empty machine | | | |
 | 3. init end to end (time: ___) | | | |
 | 4. First scenario + dashboard | | | |
 | 5. Capacity block and advice | | | |
 | 6. Reboot recovery keeps the lab | | | |
-| 7. Upgrade keeps state; uninstall is clean | | | |
+| 7. Upgrade keeps edits and state; uninstall is clean | | | |
 
 Anything you had to look up that the README did not tell you: _____

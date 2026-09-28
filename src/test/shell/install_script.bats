@@ -1,9 +1,10 @@
 #!/usr/bin/env bats
 # SPDX-License-Identifier: Apache-2.0
 #
-# install.sh installs labctl and the lab content from one release archive, with
-# no sudo, and upgrades in place without losing the user's .env or lab state.
-# Releases are served from a local directory through file:// URLs.
+# install.sh runs from a clone: it installs the labctl release named by the
+# clone's LAB_VERSION, with no sudo, and records the clone so labctl finds it
+# from any directory. Releases are served from a local directory through
+# file:// URLs.
 
 setup() {
   ROOT="$(cd "$(dirname "$BATS_TEST_FILENAME")/../../.." && pwd)"
@@ -11,84 +12,106 @@ setup() {
   export HOME="$WORK/home"
   mkdir -p "$HOME"
   export SNOWOPS_RELEASE_URL="file://$WORK/releases"
-  export SNOWOPS_VERSION=9.9.9
+  unset SNOWOPS_VERSION
   OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
   ARCH="$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')"
   ARCHIVE="labctl_9.9.9_${OS}_${ARCH}.tar.gz"
+
+  CLONE="$WORK/my lab"
+  mkdir -p "$CLONE/scenarios" "$CLONE/runtimes" "$CLONE/config"
+  CLONE="$(cd "$CLONE" && pwd)"
+  cp "$ROOT/install.sh" "$CLONE/install.sh"
+  echo "9.9.9" >"$CLONE/LAB_VERSION"
+  echo "PROFILE=k3d" >"$CLONE/config/.env.example"
 }
 
 teardown() {
   rm -rf "$WORK"
 }
 
-# release <marker> [no-content] builds a release whose files contain marker.
+# release <marker> publishes labctl 9.9.9, a script that prints marker.
 release() {
   local stage="$WORK/stage" dir="$WORK/releases/download/v9.9.9"
-  rm -rf "$stage" && mkdir -p "$stage/content/scenarios/demo" "$stage/content/config" "$dir"
+  rm -rf "$stage" && mkdir -p "$stage" "$dir"
   printf '#!/bin/sh\necho labctl %s\n' "$1" >"$stage/labctl"
   chmod +x "$stage/labctl"
-  echo "$1" >"$stage/content/scenarios/demo/scenario.yaml"
-  echo "PROFILE=k3d" >"$stage/content/config/.env.example"
-  [ "${2:-}" = no-content ] && rm -rf "$stage/content"
   tar -czf "$dir/$ARCHIVE" -C "$stage" .
   (cd "$dir" && { command -v sha256sum >/dev/null && sha256sum "$ARCHIVE" || shasum -a 256 "$ARCHIVE"; } >checksums.txt)
 }
 
-@test "installs labctl and the lab content without sudo" {
+@test "installs the labctl of LAB_VERSION and records the clone" {
   release v1
-  run sh "$ROOT/install.sh"
+  run sh "$CLONE/install.sh"
   [ "$status" -eq 0 ]
   [ "$("$HOME/.local/bin/labctl")" = "labctl v1" ]
-  [ "$(cat "$HOME/.snowops/lab/scenarios/demo/scenario.yaml")" = "v1" ]
-  [ "$(cat "$HOME/.snowops/lab/VERSION")" = "9.9.9" ]
-  [ -f "$HOME/.snowops/lab/.env" ]
+  [ "$(cat "$HOME/.snowops/lab-dir")" = "$CLONE" ]
+  [ -f "$CLONE/.env" ]
   [[ "$output" == *"labctl init"* ]]
 }
 
-@test "an upgrade replaces the content and keeps .env and lab state" {
+@test "works when run from another directory" {
   release v1
-  sh "$ROOT/install.sh" >/dev/null
-  echo "CLUSTER_NAME=mine" >"$HOME/.snowops/lab/.env"
-  mkdir -p "$HOME/.snowops/lab/.labctl" && echo kept >"$HOME/.snowops/lab/.labctl/history"
-  echo stale >"$HOME/.snowops/lab/scenarios/removed-upstream"
-
-  release v2
-  run sh "$ROOT/install.sh"
+  cd "$HOME"
+  run sh "$CLONE/install.sh"
   [ "$status" -eq 0 ]
-  [ "$(cat "$HOME/.snowops/lab/scenarios/demo/scenario.yaml")" = "v2" ]
-  [ ! -e "$HOME/.snowops/lab/scenarios/removed-upstream" ]
-  [ "$(cat "$HOME/.snowops/lab/.env")" = "CLUSTER_NAME=mine" ]
-  [ "$(cat "$HOME/.snowops/lab/.labctl/history")" = "kept" ]
+  [ "$(cat "$HOME/.snowops/lab-dir")" = "$CLONE" ]
 }
 
-@test "a corrupt download is refused and the current install is untouched" {
+@test "re-running keeps the user's .env" {
   release v1
-  sh "$ROOT/install.sh" >/dev/null
+  sh "$CLONE/install.sh" >/dev/null
+  echo "CLUSTER_NAME=mine" >"$CLONE/.env"
+  release v2
+  run sh "$CLONE/install.sh"
+  [ "$status" -eq 0 ]
+  [ "$("$HOME/.local/bin/labctl")" = "labctl v2" ]
+  [ "$(cat "$CLONE/.env")" = "CLUSTER_NAME=mine" ]
+}
+
+@test "development content is refused with the way forward" {
+  echo "9.9.10-dev" >"$CLONE/LAB_VERSION"
+  run sh "$CLONE/install.sh"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"development content"*"git switch stable"* ]]
+}
+
+@test "snowops_version overrides lab_version" {
+  echo "9.9.10-dev" >"$CLONE/LAB_VERSION"
+  release v1
+  run env SNOWOPS_VERSION=v9.9.9 sh "$CLONE/install.sh"
+  [ "$status" -eq 0 ]
+  [ "$("$HOME/.local/bin/labctl")" = "labctl v1" ]
+}
+
+@test "outside a clone it says where to run it" {
+  mkdir -p "$WORK/elsewhere" && cp "$ROOT/install.sh" "$WORK/elsewhere/"
+  run sh "$WORK/elsewhere/install.sh"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"run install.sh from your snowopslabs clone"* ]]
+}
+
+@test "a corrupt download is refused and the current labctl is untouched" {
+  release v1
+  sh "$CLONE/install.sh" >/dev/null
   release v2
   echo "0000000000000000000000000000000000000000000000000000000000000000  $ARCHIVE" \
     >"$WORK/releases/download/v9.9.9/checksums.txt"
-  run sh "$ROOT/install.sh"
+  run sh "$CLONE/install.sh"
   [ "$status" -ne 0 ]
   [[ "$output" == *"checksum mismatch"* ]]
   [ "$("$HOME/.local/bin/labctl")" = "labctl v1" ]
 }
 
-@test "an archive without lab content is refused" {
-  release v1 no-content
-  run sh "$ROOT/install.sh"
-  [ "$status" -ne 0 ]
-  [[ "$output" == *"no lab content"* ]]
-}
-
 @test "a missing release names the URL it tried" {
-  run env SNOWOPS_VERSION=0.0.1 sh "$ROOT/install.sh"
+  echo "0.0.1" >"$CLONE/LAB_VERSION"
+  run sh "$CLONE/install.sh"
   [ "$status" -ne 0 ]
   [[ "$output" == *"could not download"*"v0.0.1"* ]]
 }
 
 @test "says how to put labctl on PATH when it is not" {
   release v1
-  run env PATH="/usr/bin:/bin:/usr/sbin:/sbin" sh "$ROOT/install.sh"
+  run env PATH="/usr/bin:/bin:/usr/sbin:/sbin" sh "$CLONE/install.sh"
   [ "$status" -eq 0 ]
   [[ "$output" == *"is not on your PATH"* ]]
 }

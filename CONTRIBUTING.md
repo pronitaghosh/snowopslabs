@@ -44,12 +44,17 @@ before implementation. This keeps architectural direction coherent.
 
 ## Development setup
 
-Unlike end users (who run `install.sh` — see the [README](README.md#install)),
-contributors **build `labctl` from source** so they can test their changes. You need **Go 1.25+** and **Node 22+**.
-The steps are identical on macOS, Linux, and Windows/WSL2 — on Windows run them
-inside your WSL2 distro, never native PowerShell.
+End users clone the latest release (`--branch stable`) and download a matching
+`labctl` with `./install.sh` — see the [README](README.md#install).
+Contributors clone `main` and **build `labctl` from source** so they can test
+their changes. You need **Go 1.25+** and **Node 22+**. The steps are identical
+on macOS, Linux, and Windows/WSL2 — on Windows run them inside your WSL2
+distro, in your Linux home, never native PowerShell.
 
 ```bash
+git clone https://github.com/sagar2395/snowopslabs.git
+cd snowopslabs
+
 # 1. Build the CLI, UI embedded (no committed binary). The Go module lives under
 #    src/; the root make targets delegate there and the binary lands at bin/labctl.
 make cli-build
@@ -76,15 +81,19 @@ make docs-check    # the docs agree with the code and the website's manifest
 make fmt           # gofmt the tree
 ```
 
-Inside a checkout, `labctl` uses the checkout's content (it walks up from the
-working directory to the directory with `scenarios/` and `runtimes/`), so your
-edits take effect without reinstalling; outside it, it uses the installed lab in
-`~/.snowops/lab`.
+`labctl` finds the lab in this order: `--project-dir`; the clone around the
+working directory (it walks up to the directory with `scenarios/` and
+`runtimes/`); `SNOWOPS_LAB_DIR`; and the clone `install.sh` last recorded in
+`~/.snowops/lab-dir`. Inside your checkout your edits take effect without
+reinstalling. Lab state (active scenarios, history, progress, snapshots) lives
+in `~/.snowops/state/<cluster>/`, outside every clone, so all of them see the
+same cluster. `main` carries a `-dev` `LAB_VERSION`, and a release `labctl`
+warns when pointed at it.
 
 ### Repository layout
 
 ```
-# User-facing content at the root — what a release ships under content/
+# User-facing content at the root — what a learner's clone runs
 scenarios/ incidents/     declarative content
 learn/ challenges/
 platform/<cat>/<prov>/    install.sh / uninstall.sh / status.sh / values.yaml
@@ -93,8 +102,9 @@ apps/<name>/              sample workloads
 bootstrap/                tool installation
 config/                   versions.env, footprints.yaml, .env.example
 docs/                     PRODUCT, ROADMAP, TESTING, architecture/, adr/, runbooks/
-install.sh                the end-user installer
-scripts/                  release staging, footprint measurement, docs checks
+install.sh                installs the labctl release that matches LAB_VERSION
+LAB_VERSION               the release this checkout belongs to (-dev on main)
+scripts/                  footprint measurement, docs checks
 
 # The labctl Go module — self-contained under src/
 src/cmd/labctl/           entrypoint
