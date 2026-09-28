@@ -104,13 +104,9 @@ These hold everywhere. Breaking one is a review rejection, not a discussion.
 
 **Comments**
 
-- Say what the code does and why it is needed, in the present tense. Three
-  lines is a lot; ten is always wrong. This applies to Go, shell, TypeScript
-  and YAML alike.
-- Never tell the story behind a change: no bug or incident that prompted it,
-  no decision or rejected alternative, no measurements or log output, no
-  "used to", "once" or "no longer", and no task, ticket, wave or PR numbers.
-  That history belongs in the commit message and in ADRs.
+- The comment rule in [CLAUDE.md](../CLAUDE.md#hard-rules) applies to Go,
+  shell, TypeScript and YAML alike: what the code does and why, never the
+  story behind a change.
 
 ---
 

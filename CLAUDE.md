@@ -1,0 +1,101 @@
+# CLAUDE.md
+
+**SnowOps Labs** — a Kubernetes platform-engineering simulator. `labctl` (Go
+CLI) stands up a local production-shaped cluster, runs declarative scenarios,
+injects reversible faults, and grades the fix. Go 1.25, built on the toolchain
+pinned in `src/go.mod` + React 18/Vite/TS UI (embedded in the binary) + POSIX
+shell/helm/kubectl for all cluster work.
+
+## Read this first
+
+**[docs/AGENT-CONTEXT.md](docs/AGENT-CONTEXT.md)** is the working contract: the
+routing table telling you which single document answers your task, every
+invariant, and the definition of done.
+
+Documentation is the source of truth. Trust it instead of re-deriving facts from
+the source — that is the main way tokens get burned here. When a doc and the
+code disagree, fix the doc in the same change.
+
+## Layout
+
+- `src/` — the Go module (`github.com/sagar2395/snowopslabs`) and the UI. **Run
+  `go` and `make` targets from here.**
+  - `src/cmd/labctl/` entrypoint · `src/internal/` implementation ·
+    `src/pkg/` exported SDK · `src/ui/` React app · `src/services/` in-cluster
+    helpers such as the k6 traffic generator
+- `engine/`, `make/`, `platform/`, `runtimes/` — shell and helm orchestration
+  that Go invokes
+- `scenarios/`, `incidents/`, `challenges/`, `learn/`, `apps/` — declarative
+  YAML and scripts
+- `config/versions.env` — tool minimums **and** every chart pin
+- `docs/` — the source of truth
+
+## Commands
+
+```bash
+make cli-build      # build bin/labctl with the UI embedded
+make ui-dev         # serve src/ui/dist live, no Go rebuild
+make test           # Go unit + apps + shell (bats), -race, coverage gate
+make test-go        # Go unit + contract tests (>=80% per package)
+make test-ui        # vitest component tests
+make test-e2e       # playwright journeys
+make lint           # fmt-check + shell + Go + UI lint + sec + vuln
+make fmt            # gofmt the tree
+make docs-check     # documentation is in step with the code
+```
+
+From `src/ui/`: `npm run test`, `npm run test:e2e`, `npm run typecheck`.
+
+## The four loops
+
+`labctl init` (build) → `labctl scenario up <name>` (simulate) →
+`labctl incident inject <name>` (break) → `labctl scenario verify <name>`
+(measure). Commands: [CLI reference](docs/reference/cli/index.md).
+
+Providers are swappable via `.env` or CLI vars — `INGRESS_PROVIDER`,
+`METRICS_PROVIDER`, `LOGGING_PROVIDER`, `TRACING_PROVIDER`, with
+`PROFILE=k3d|kind|incluster`. Per-app config is `apps/<name>/app.env`.
+
+## Go skills
+
+Load the `golang-how-to` skill (cc-skills-golang) before writing, reviewing or
+refactoring any Go code, and follow the skills it routes to. Where a skill and
+[GO-CONVENTIONS](docs/GO-CONVENTIONS.md) differ, GO-CONVENTIONS wins (e.g. error
+text says what to do next).
+
+## Hard rules
+
+The full set is in [AGENT-CONTEXT](docs/AGENT-CONTEXT.md#invariants). The ones
+most often broken:
+
+- POSIX shell only; no cgo; no `grep -P`, `sed -i` without a backup, `readlink -f`
+  or `date -d`.
+- Go orchestrates, scripts do the work. Never `exec.Command(...).Run()` — go
+  through `internal/run` with a context, timeout and lock key.
+- Scenarios, incidents, checks and learning paths are YAML plus scripts, never
+  hardcoded Go.
+- One values file per component; every chart pinned; `/api/v2` only;
+  instrumentation is middleware, never per-handler.
+- Comments (Go, shell, TypeScript, YAML) say **what the code does and why it
+  is needed**, in the present tense, under three lines. They never tell the
+  story behind a change: no bug or incident that prompted it, no decision or
+  alternative considered, no measurements or logs, no "used to" / "once" /
+  "no longer", no task or ticket numbers. That belongs in the commit message.
+- Tests are table-driven and hermetic. No live cluster, network or real
+  credentials.
+- Never land code without updating the docs it affects in the same change.
+- Don't commit build artifacts (`bin/`, `dist/`, `coverage.out`, `src/ui/dist/`).
+
+## Traps that cost a day each
+
+Full detail lives with the subject; these are the pointers.
+
+- **Observability** — kube-prometheus-stack's empty selectors, Tempo on port
+  3200, Kafka's two metric sources, Promtail relabelling, k6's seconds-not-
+  milliseconds: [R13](docs/runbooks/R13-observability-pipeline.md).
+- **Helm** — `upgrade` and `uninstall` both ignore CRDs; most of a StatefulSet
+  spec is immutable, so use `helm_upgrade_install` from `platform/_lib/helm.sh`:
+  [R05](docs/runbooks/R05-platform-components.md).
+- **Scenario authoring** — `platformValues` vs `valuesFile`, `adopt`,
+  `uninstallScript`, `pending` checks:
+  [scenario schema](docs/reference/scenario-schema.md).
