@@ -62,7 +62,7 @@ func browserCommands(goos string, wsl bool, url string) [][]string {
 // wslDoctorNotes returns the WSL guidance `labctl doctor` prints. A Windows
 // browser resolves ingress hostnames with the Windows hosts file, so `labctl
 // hosts add` inside WSL is not enough on its own.
-func wslDoctorNotes(cwd string) []string {
+func wslDoctorNotes(labDir string) []string {
 	notes := []string{
 		"WSL detected. The web UI (labctl ui, http://localhost:3939) works as-is via WSL2 localhost forwarding.",
 		"Ingress hostnames (e.g. http://grafana.k3d.local) opened in a Windows browser use the WINDOWS hosts file,",
@@ -73,10 +73,10 @@ func wslDoctorNotes(cwd string) []string {
 	}
 	// Windows drives are mounted over a slow 9p bridge and may check files out
 	// with CRLF line endings, which breaks every shell script in the lab.
-	if strings.HasPrefix(cwd, "/mnt/") {
+	if strings.HasPrefix(labDir, "/mnt/") {
 		notes = append(notes,
-			"You are under "+cwd+", a Windows drive. Keep the lab on the Linux filesystem",
-			"  (e.g. ~/snowopslabs): it is much faster there and scripts keep their LF line endings.")
+			"The lab is under "+labDir+", a Windows drive. Clone it on the Linux filesystem",
+			"  (e.g. cd ~ && git clone ...): it is much faster there and scripts keep their LF line endings.")
 	}
 	return notes
 }

@@ -4,7 +4,8 @@
 // labctl API/UI server. It is OFF by default: unless LABCTL_AUTH is "true",
 // there is no login and no role check.
 //
-// When enabled, users live in .labctl/users.yaml with one of two roles:
+// When enabled, users live in users.yaml in the lab state directory, with one
+// of two roles:
 //
 //	operator    — full control (platform, runtime, lab, apps, services, …)
 //	participant — run challenges/incidents/learn + read status; may NOT mutate
@@ -70,7 +71,7 @@ type User struct {
 	Role         string `yaml:"role"`
 }
 
-// UsersFile is the on-disk shape of .labctl/users.yaml.
+// UsersFile is the on-disk shape of users.yaml.
 type UsersFile struct {
 	Users []User `yaml:"users"`
 }
@@ -81,13 +82,13 @@ func Enabled() bool {
 }
 
 // DefaultUsersPath returns the users file location: LABCTL_USERS_FILE if set
-// (the team-mode Helm chart mounts the users Secret there), else
-// .labctl/users.yaml under the project root.
-func DefaultUsersPath(projectRoot string) string {
+// (the team-mode Helm chart mounts the users Secret there), else users.yaml in
+// the lab state directory stateRoot.
+func DefaultUsersPath(stateRoot string) string {
 	if p := os.Getenv("LABCTL_USERS_FILE"); p != "" {
 		return p
 	}
-	return filepath.Join(projectRoot, ".labctl", "users.yaml")
+	return filepath.Join(stateRoot, "users.yaml")
 }
 
 // HashPassword returns an Argon2id hash with a new random salt, encoded as

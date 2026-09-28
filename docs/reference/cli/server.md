@@ -79,7 +79,7 @@ new route cannot ship unmeasured.
 
 Accounts for the API and UI. Authentication is **off by default**; the server
 enforces it only when started with `LABCTL_AUTH=true`. These commands edit
-`.labctl/users.yaml` (Argon2id hashes, mode 0600) either way. Older
+`~/.snowops/state/<cluster>/users.yaml` (Argon2id hashes, mode 0600) either way. Older
 PBKDF2-HMAC-SHA256 hashes still verify, so an existing file keeps working.
 
 Two roles: `operator` (full control) and `participant` (run challenges,

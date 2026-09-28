@@ -14,8 +14,8 @@ import (
 func learnEngine(s *Server) *learn.Engine {
 	return learn.New(
 		filepath.Join(s.cfg.ProjectRoot, "learn"),
-		filepath.Join(s.cfg.ProjectRoot, ".labctl", "learn"),
-		filepath.Join(s.cfg.ProjectRoot, ".labctl", "history"),
+		filepath.Join(s.cfg.StateDir, "learn"),
+		filepath.Join(s.cfg.StateDir, "history"),
 	)
 }
 

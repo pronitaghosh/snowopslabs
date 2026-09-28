@@ -5,7 +5,7 @@
 // A snapshot records which platform components, apps and scenarios were
 // active, not the cluster's data. Restore reinstalls them through the normal
 // idempotent install paths. Reset removes everything except the cluster and its
-// ingress. Snapshots are stored in .labctl/snapshots/, which is not committed.
+// ingress. Snapshots are stored in the lab state directory's snapshots/.
 package lab
 
 import (
@@ -42,14 +42,14 @@ type Snapshot struct {
 
 var validSnapshotName = regexp.MustCompile(`^[a-zA-Z0-9_-]{1,64}$`)
 
-// Store persists snapshots under <projectRoot>/.labctl/snapshots/.
+// Store persists snapshots under <stateRoot>/snapshots/.
 type Store struct {
 	Dir string
 }
 
-// NewStore returns a snapshot store rooted at the project's runtime state dir.
-func NewStore(projectRoot string) *Store {
-	return &Store{Dir: filepath.Join(projectRoot, ".labctl", "snapshots")}
+// NewStore returns a snapshot store in the lab state directory stateRoot.
+func NewStore(stateRoot string) *Store {
+	return &Store{Dir: filepath.Join(stateRoot, "snapshots")}
 }
 
 // Save writes the snapshot as YAML, overwriting any previous one of the

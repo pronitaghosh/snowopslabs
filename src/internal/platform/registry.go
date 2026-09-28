@@ -78,7 +78,10 @@ type Registry struct {
 	ProjectRoot  string
 	monitoringNS string
 	providers    map[string][]Provider // category -> providers
-	stateDir     string                // .labctl/platform — install-intent markers
+	// StateRoot is the lab state directory; install markers go in its
+	// platform/ subdirectory. The constructors set <projectRoot>/.labctl, and
+	// labctl points it at config.StateDir.
+	StateRoot string
 }
 
 // NewRegistry scans the platform/ directory for available providers.
@@ -97,16 +100,19 @@ func NewRegistryWithNamespace(projectRoot, monitoringNS string) *Registry {
 		ProjectRoot:  projectRoot,
 		monitoringNS: monitoringNS,
 		providers:    make(map[string][]Provider),
-		stateDir:     filepath.Join(projectRoot, ".labctl", "platform"),
+		StateRoot:    filepath.Join(projectRoot, ".labctl"),
 	}
 	r.scan()
 	return r
 }
 
+// stateDir holds one install marker per component labctl installed.
+func (r *Registry) stateDir() string { return filepath.Join(r.StateRoot, "platform") }
+
 // --- install markers ---------------------------------------------------------
 //
-// A successful install through the registry writes a marker file in
-// .labctl/platform/, and an uninstall removes it, so lab snapshot and reset
+// A successful install through the registry writes a marker file in the
+// state directory's platform/, and an uninstall removes it, so lab snapshot and reset
 // know what labctl installed without asking the cluster. Components installed
 // any other way (make targets, manual helm) have no marker.
 
@@ -115,22 +121,22 @@ func markerFile(category, name string) string {
 }
 
 func (r *Registry) markInstalled(category, name string) {
-	if err := os.MkdirAll(r.stateDir, 0755); err != nil {
+	if err := os.MkdirAll(r.stateDir(), 0755); err != nil {
 		return
 	}
-	_ = os.WriteFile(filepath.Join(r.stateDir, markerFile(category, name)),
+	_ = os.WriteFile(filepath.Join(r.stateDir(), markerFile(category, name)),
 		[]byte(category+"/"+name+"\n"), 0644)
 }
 
 func (r *Registry) markUninstalled(category, name string) {
-	_ = os.Remove(filepath.Join(r.stateDir, markerFile(category, name)))
+	_ = os.Remove(filepath.Join(r.stateDir(), markerFile(category, name)))
 }
 
 // Installed returns the components installed through the registry, as sorted
 // "category/provider" strings (read from marker file contents, so category
 // nesting survives round-trips).
 func (r *Registry) Installed() []string {
-	entries, err := os.ReadDir(r.stateDir)
+	entries, err := os.ReadDir(r.stateDir())
 	if err != nil {
 		return nil
 	}
@@ -139,7 +145,7 @@ func (r *Registry) Installed() []string {
 		if e.IsDir() || !strings.HasSuffix(e.Name(), ".installed") {
 			continue
 		}
-		data, err := os.ReadFile(filepath.Join(r.stateDir, e.Name()))
+		data, err := os.ReadFile(filepath.Join(r.stateDir(), e.Name()))
 		if err != nil {
 			continue
 		}

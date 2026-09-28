@@ -33,8 +33,8 @@ func learnEngine() *learn.Engine {
 	root := cfg.ProjectRoot
 	return learn.New(
 		filepath.Join(root, "learn"),
-		filepath.Join(root, ".labctl", "learn"),
-		filepath.Join(root, ".labctl", "history"),
+		filepath.Join(cfg.StateDir, "learn"),
+		filepath.Join(cfg.StateDir, "history"),
 	)
 }
 

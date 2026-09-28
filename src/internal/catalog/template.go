@@ -3,6 +3,7 @@
 package catalog
 
 import (
+	"path/filepath"
 	"time"
 
 	"github.com/sagar2395/snowopslabs/internal/tmpl"
@@ -21,6 +22,7 @@ func DefaultTemplateContext(projectRoot string) TemplateContext {
 		IngressURLSuffix:    "k3d.local",
 		MonitoringNamespace: "monitoring",
 		ProjectRoot:         projectRoot,
+		StateDir:            filepath.Join(projectRoot, ".labctl"),
 		LokiRetentionPeriod: "72h",
 		IngressClass:        "traefik",
 		WorkloadName:        "go-api",

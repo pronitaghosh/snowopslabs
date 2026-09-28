@@ -119,7 +119,7 @@ never established fails on a fresh one.
 
 ```sh
 ./bin/labctl learn progress "$PATH_NAME"      # mid-path: accurate?
-ls .labctl/learn/                             # progress is stored here
+ls ~/.snowops/state/snowops/learn/            # progress is stored here
 # start a new shell, then:
 ./bin/labctl learn progress "$PATH_NAME"      # survived?
 ./bin/labctl learn next "$PATH_NAME"          # re-running a completed module is safe

@@ -167,10 +167,13 @@ type Engine struct {
 	MonitoringNamespace string
 	// Workload is the app faults are injected into, unless a fault names a
 	// fixed target.
-	Workload   workload.Workload
+	Workload workload.Workload
+	// StateRoot is the lab state directory; the active fault goes in its
+	// incidents/ subdirectory and run records in history/. NewEngine sets
+	// <projectRoot>/.labctl, and labctl points it at config.StateDir.
+	StateRoot  string
 	faults     map[string]*Fault
 	loadErrors map[string]error
-	stateDir   string
 	// injectedAt is when the incident being graded was injected, set only while
 	// Status runs; {{.SinceActivation}} is measured from it.
 	injectedAt time.Time
@@ -186,7 +189,7 @@ func NewEngine(projectRoot, domainSuffix string) *Engine {
 		Workload:            workload.Default(workload.DefaultApp),
 		faults:              make(map[string]*Fault),
 		loadErrors:          make(map[string]error),
-		stateDir:            filepath.Join(projectRoot, ".labctl", "incidents"),
+		StateRoot:           filepath.Join(projectRoot, ".labctl"),
 	}
 	e.scan()
 	return e
@@ -383,7 +386,10 @@ func (e *Engine) LoadErrors() map[string]error {
 
 // --- active-incident state ---------------------------------------------------
 
-func (e *Engine) activeFile() string { return filepath.Join(e.stateDir, "active.yaml") }
+// stateDir holds the active fault's record.
+func (e *Engine) stateDir() string { return filepath.Join(e.StateRoot, "incidents") }
+
+func (e *Engine) activeFile() string { return filepath.Join(e.stateDir(), "active.yaml") }
 
 // Active returns the current incident, or (nil, nil) when none is active.
 func (e *Engine) Active() (*Active, error) {
@@ -402,7 +408,7 @@ func (e *Engine) Active() (*Active, error) {
 }
 
 func (e *Engine) saveActive(a *Active) error {
-	if err := os.MkdirAll(e.stateDir, 0755); err != nil {
+	if err := os.MkdirAll(e.stateDir(), 0755); err != nil {
 		return err
 	}
 	data, err := yaml.Marshal(a)
@@ -717,6 +723,7 @@ func (e *Engine) templateContextFor(bound workload.Workload) tmpl.Context {
 		IngressURLSuffix:    e.IngressURLSuffix,
 		MonitoringNamespace: e.MonitoringNamespace,
 		ProjectRoot:         e.ProjectRoot,
+		StateDir:            e.StateRoot,
 		IngressClass:        "traefik",
 		WorkloadName:        w.Name,
 		WorkloadNamespace:   w.Namespace,

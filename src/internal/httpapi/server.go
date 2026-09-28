@@ -132,7 +132,7 @@ func NewServer(cfg *config.Config, exec *executor.Executor, registry *platform.R
 		s.loginLimit = newLoginLimiter(loginMaxAttempts, loginWindow)
 		// An unreadable users file leaves an empty store; the server logs a
 		// warning at start and keeps running.
-		if store, err := auth.LoadStore(auth.DefaultUsersPath(cfg.ProjectRoot)); err == nil {
+		if store, err := auth.LoadStore(auth.DefaultUsersPath(cfg.StateDir)); err == nil {
 			s.users = store
 		} else {
 			s.users = auth.NewStore()
@@ -141,7 +141,7 @@ func NewServer(cfg *config.Config, exec *executor.Executor, registry *platform.R
 		switch {
 		case s.userLoadErr != nil:
 			slog.Warn("auth enabled but users file failed to load; nobody can log in",
-				"error", s.userLoadErr, "path", auth.DefaultUsersPath(cfg.ProjectRoot))
+				"error", s.userLoadErr, "path", auth.DefaultUsersPath(cfg.StateDir))
 		case s.users.Count() == 0:
 			slog.Warn("auth enabled but no users defined; add one with 'labctl users add <name> --role operator'")
 		default:

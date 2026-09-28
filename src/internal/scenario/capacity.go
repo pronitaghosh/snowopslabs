@@ -86,7 +86,7 @@ func adoptedFrom(comp *Component) (string, bool) {
 // ActiveDemands is the Demand of every active scenario other than except,
 // each against the app it was activated with.
 func (e *Engine) ActiveDemands(except string) []capacity.Demand {
-	entries, err := os.ReadDir(e.stateDir)
+	entries, err := os.ReadDir(e.stateDir())
 	if err != nil {
 		return []capacity.Demand{}
 	}

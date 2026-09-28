@@ -350,7 +350,8 @@ URLs, commands, namespaces, snippets and manifests are Go templates.
 | `{{.DomainSuffix}}` | `k3d.local` | Ingress domain suffix from the active runtime. Use it for **hostnames** (an Ingress `host:`), never in a URL. |
 | `{{.IngressURLSuffix}}` | `k3d.local` or `k3d.local:8080` | The domain suffix plus the ingress port when it is not 80 (the runtime falls back when 80 is busy). Build every **URL** from it: `http://grafana.{{.IngressURLSuffix}}`. `labctl validate` rejects a URL built from `{{.DomainSuffix}}`. |
 | `{{.MonitoringNamespace}}` | `monitoring` | Where the monitoring stack lives |
-| `{{.ProjectRoot}}` | `/path/to/project` | Absolute path to the content root |
+| `{{.ProjectRoot}}` | `/home/me/snowopslabs` | Absolute path to the learner's clone. Commands a learner copies (hints, explore commands, remediations) name repo files through it, so they work from any directory. |
+| `{{.StateDir}}` | `/home/me/.snowops/state/snowops` | The lab state directory, for files that belong to the running lab rather than the clone (e.g. backup archives). Scripts get it as `LAB_STATE_DIR`. |
 | `{{.LokiRetentionPeriod}}` | `72h` | Loki's configured retention |
 | `{{.IngressClass}}` | `traefik` | Ingress class for scenario Ingress manifests |
 | `{{.WorkloadName}}` | `go-api` | The bound app's name, and its Deployment name |
@@ -424,6 +425,14 @@ script, check script and fault script run by the engine is given:
 | `WORKLOAD_NAMESPACE` | `go-api` |
 | `WORKLOAD_PORT` | `8080` |
 | `WORKLOAD_METRIC` | `http_server_request_duration_seconds` |
+| `PROJECT_ROOT` | `/home/me/snowopslabs` (the clone) |
+| `LAB_STATE_DIR` | `/home/me/.snowops/state/snowops` |
+
+A script that prints a command for the learner names repo files through
+`$PROJECT_ROOT`, and one that keeps files for the running lab puts them under
+`$LAB_STATE_DIR`. By hand neither is set, so fall back to the script's own
+location and to labctl's default:
+`${LAB_STATE_DIR:-${SNOWOPS_HOME:-$HOME/.snowops}/state/${CLUSTER_NAME:-snowops}}`.
 
 A learner also runs scripts by hand, from a terminal that has none of these. So
 a scenario script sources the shared helper first, which takes the binding from

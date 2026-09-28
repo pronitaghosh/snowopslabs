@@ -179,7 +179,7 @@ kubectl -n "$NS" patch <full fix>
 
 # 4. active state lost — resolve by name
 ./bin/labctl incident inject "$FAULT"
-rm -f .labctl/active-incident* 2>/dev/null
+rm -f ~/.snowops/state/snowops/incidents/active.yaml 2>/dev/null
 ./bin/labctl incident resolve "$FAULT"
 ```
 

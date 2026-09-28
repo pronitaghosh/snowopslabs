@@ -4,7 +4,7 @@
 
 Learning paths combine cluster setup, app deployment, scenarios and incidents
 into structured modules with machine-verifiable completion checks. Progress
-lives in `.labctl/learn/` and survives CLI restarts.
+lives in `~/.snowops/state/<cluster>/learn/` and survives CLI restarts.
 
 ```bash
 labctl learn list                                    # paths with your progress

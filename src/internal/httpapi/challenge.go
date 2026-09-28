@@ -14,8 +14,8 @@ import (
 func challengeEngine(s *Server) *challenge.Engine {
 	return challenge.New(
 		filepath.Join(s.cfg.ProjectRoot, "challenges"),
-		filepath.Join(s.cfg.ProjectRoot, ".labctl", "challenges"),
-		filepath.Join(s.cfg.ProjectRoot, ".labctl", "history"),
+		filepath.Join(s.cfg.StateDir, "challenges"),
+		filepath.Join(s.cfg.StateDir, "history"),
 	)
 }
 

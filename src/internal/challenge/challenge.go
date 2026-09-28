@@ -129,7 +129,7 @@ type Engine struct {
 }
 
 // New creates an Engine. resultsDir is the directory holding results.jsonl
-// (usually .labctl/history); pass "" to skip writing results records.
+// (usually the lab state directory's history/); pass "" to skip writing results records.
 func New(challengeDir, stateDir, resultsDir string) *Engine {
 	return &Engine{
 		challengeDir: challengeDir,

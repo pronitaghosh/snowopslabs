@@ -30,7 +30,7 @@ func newScenarioServer(t *testing.T, scenarios map[string]string) *Server {
 		}
 	}
 	return &Server{
-		cfg:    &config.Config{ProjectRoot: root, DomainSuffix: "k3d.local", MonitoringNamespace: "monitoring"},
+		cfg:    &config.Config{ProjectRoot: root, StateDir: filepath.Join(root, ".labctl"), DomainSuffix: "k3d.local", MonitoringNamespace: "monitoring"},
 		scenes: scenario.NewEngine(root, "k3d.local", "k3d"),
 	}
 }

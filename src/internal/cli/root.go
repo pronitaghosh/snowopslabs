@@ -72,8 +72,15 @@ var rootCmd = &cobra.Command{
 			return fmt.Errorf("loading config: %w", err)
 		}
 		slog.Debug("config loaded", "root", cfg.ProjectRoot, "profile", cfg.Profile, "cluster", cfg.ClusterName)
-		if msg := versionSkew(cmd.Root().Version, config.ContentVersion(cfg.ProjectRoot)); msg != "" {
+		if msg := versionSkew(cmd.Root().Version, config.LabVersion(cfg.ProjectRoot), cfg.ProjectRoot); msg != "" {
 			fmt.Fprintln(cmd.ErrOrStderr(), msg)
+		}
+		legacyState := filepath.Join(cfg.ProjectRoot, ".labctl")
+		switch moved, err := config.MigrateState(legacyState, cfg.StateDir); {
+		case err != nil:
+			fmt.Fprintf(cmd.ErrOrStderr(), "Warning: %v\n", err)
+		case moved:
+			fmt.Fprintf(cmd.ErrOrStderr(), "Moved the lab state from %s to %s.\n", legacyState, cfg.StateDir)
 		}
 
 		scriptExec = executor.New(cfg.ProjectRoot)
@@ -85,6 +92,8 @@ var rootCmd = &cobra.Command{
 		// Set the core cluster settings explicitly, so scripts get them (or
 		// their defaults) even without .env or runtime.env.
 		scriptExec.SetEnv("CLUSTER_NAME", cfg.ClusterName)
+		scriptExec.SetEnv("PROJECT_ROOT", cfg.ProjectRoot)
+		scriptExec.SetEnv("LAB_STATE_DIR", cfg.StateDir)
 		scriptExec.SetEnv("DOMAIN_SUFFIX", cfg.DomainSuffix)
 		// Scripts build lab URLs from this so a fallback ingress port is kept.
 		scriptExec.SetEnv("INGRESS_URL_SUFFIX", cfg.IngressURLSuffix())
@@ -98,6 +107,7 @@ var rootCmd = &cobra.Command{
 		scriptExec.SetEnv("PROFILE", cfg.Profile)
 		scriptExec.SetEnv("MONITORING_NAMESPACE", cfg.MonitoringNamespace)
 		reg = platform.NewRegistryWithNamespace(cfg.ProjectRoot, cfg.MonitoringNamespace)
+		reg.StateRoot = cfg.StateDir
 		// The workload binding both engines resolve {{.Workload*}} against.
 		// APP_NAME selects it (ADR-0014); --app overrides it for one command,
 		// and bindWorkload treats that deliberate choice more strictly.
@@ -157,6 +167,7 @@ func bindWorkload(appName string, explicit bool) error {
 	scriptExec.SetEnv("WORKLOAD_METRIC", bound.Metric)
 
 	scenes = scenario.NewEngine(cfg.ProjectRoot, cfg.DomainSuffix, cfg.Profile)
+	scenes.StateRoot = cfg.StateDir
 	scenes.MonitoringNamespace = cfg.MonitoringNamespace
 	scenes.IngressClass = cfg.IngressClass
 	scenes.IngressURLSuffix = cfg.IngressURLSuffix()
@@ -164,6 +175,7 @@ func bindWorkload(appName string, explicit bool) error {
 	scenes.Contract = boundContract
 
 	incEng = incident.NewEngine(cfg.ProjectRoot, cfg.DomainSuffix)
+	incEng.StateRoot = cfg.StateDir
 	incEng.IngressURLSuffix = cfg.IngressURLSuffix()
 	incEng.MonitoringNamespace = cfg.MonitoringNamespace
 	incEng.Workload = bound
@@ -239,17 +251,23 @@ func Execute(version string) {
 	}
 }
 
-// versionSkew warns when the binary and the installed lab content come from
-// different releases, which install.sh keeps in step. It says nothing for a
-// development build or a checkout, which have no release to compare.
-func versionSkew(binary, content string) string {
+// versionSkew warns when the labctl binary and the lab at root (its
+// LAB_VERSION) belong to different releases, and says how to bring them in
+// step. It says nothing for a development build of labctl, or for a lab
+// without LAB_VERSION.
+func versionSkew(binary, lab, root string) string {
 	binary = strings.TrimPrefix(binary, "v")
-	content = strings.TrimPrefix(content, "v")
-	if content == "" || binary == "dev" || strings.ContainsAny(binary, "-+") || binary == content {
+	lab = strings.TrimPrefix(lab, "v")
+	if lab == "" || binary == "dev" || strings.ContainsAny(binary, "-+") || binary == lab {
 		return ""
 	}
-	return fmt.Sprintf("Warning: labctl is %s but the lab content is %s. Re-run the installer to bring them in step:\n"+
-		"  curl -fsSL https://raw.githubusercontent.com/sagar2395/snowopslabs/main/install.sh | sh", binary, content)
+	if strings.Contains(lab, "-") {
+		return fmt.Sprintf("Warning: labctl is %s but %s is development content (%s). Use a release:\n"+
+			"  cd %s && git switch stable && ./install.sh\n"+
+			"or build labctl from this checkout: make cli-build", binary, root, lab, root)
+	}
+	return fmt.Sprintf("Warning: labctl is %s but the lab in %s is %s. Install the labctl that matches it:\n"+
+		"  cd %s && ./install.sh", binary, root, lab, root)
 }
 
 // addUserBinToPath puts ~/.local/bin, where setup-tools installs kubectl, helm

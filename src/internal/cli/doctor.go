@@ -14,6 +14,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/sagar2395/snowopslabs/internal/capacity"
+	"github.com/sagar2395/snowopslabs/internal/config"
 	"github.com/sagar2395/snowopslabs/internal/toolchain"
 )
 
@@ -68,6 +69,12 @@ func runDoctor(ctx context.Context, out io.Writer, runner toolchain.Runner) erro
 	_ = w.Flush()
 
 	problems, notes := toolFindings(results)
+	lab, labErr := config.FindLab(projectDir)
+	if labErr != nil {
+		problems = append(problems, labErr.Error())
+	} else {
+		fmt.Fprintf(out, "\nLab:      %s%s\n", lab, labVersionSuffix(config.LabVersion(lab)))
+	}
 	docker := dockerCapacity(ctx, runner, capacity.Platform{GOOS: runtime.GOOS, WSL: isWSL()})
 	if docker.line != "" {
 		fmt.Fprintf(out, "\nDocker:   %s\n", docker.line)
@@ -85,7 +92,11 @@ func runDoctor(ctx context.Context, out io.Writer, runner toolchain.Runner) erro
 
 	printBullets(out, "Notes:", "-", notes)
 	if isWSL() {
-		printBullets(out, "WSL notes:", "-", wslDoctorNotes(workingDir()))
+		dir := lab
+		if labErr != nil {
+			dir = workingDir()
+		}
+		printBullets(out, "WSL notes:", "-", wslDoctorNotes(dir))
 	}
 	if len(problems) > 0 {
 		printBullets(out, "Problems to fix:", "✗", problems)
@@ -126,6 +137,14 @@ func printBullets(out io.Writer, title, bullet string, items []string) {
 	for _, item := range items {
 		fmt.Fprintf(out, "  %s %s\n", bullet, item)
 	}
+}
+
+// labVersionSuffix formats a lab's LAB_VERSION for the doctor report.
+func labVersionSuffix(version string) string {
+	if version == "" {
+		return ""
+	}
+	return " (" + version + ")"
 }
 
 // workingDir is the current directory, or "" when it cannot be read; the

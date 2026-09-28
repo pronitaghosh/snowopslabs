@@ -93,9 +93,13 @@ type Engine struct {
 	// the remaining active scenarios need; an error is reported, not returned.
 	Release ReleaseFunc
 
+	// StateRoot is the lab state directory; activation markers go in its
+	// scenarios/ subdirectory. NewEngine sets <projectRoot>/.labctl, and labctl
+	// points it at the cluster's state directory (config.StateDir).
+	StateRoot string
+
 	scenarios  map[string]*Scenario
 	loadErrors map[string]error // scenario dir name → why it failed to load
-	stateDir   string
 
 	// out receives Up and Down's progress output; nil means os.Stdout. The
 	// scenario service points it at the run transcript.
@@ -151,7 +155,7 @@ func NewEngine(projectRoot, domainSuffix, profile string, monitoringNamespace ..
 		Hooks:               extension.DefaultHooks(),
 		scenarios:           make(map[string]*Scenario),
 		loadErrors:          make(map[string]error),
-		stateDir:            filepath.Join(projectRoot, ".labctl", "scenarios"),
+		StateRoot:           filepath.Join(projectRoot, ".labctl"),
 	}
 	e.scan()
 	return e
@@ -579,6 +583,9 @@ func (e *Engine) Down(name string, exec CommandExecutor) error {
 	return nil
 }
 
+// stateDir holds one marker file per active scenario.
+func (e *Engine) stateDir() string { return filepath.Join(e.StateRoot, "scenarios") }
+
 // Status returns a summary of active scenarios.
 func (e *Engine) Status() []ScenarioStatus {
 	var result []ScenarioStatus
@@ -612,7 +619,7 @@ func (e *Engine) Status() []ScenarioStatus {
 // and returns the names it cleared. Lab reset uses it, because after a reset
 // the scenarios must show as inactive even if their teardown failed.
 func (e *Engine) DeactivateAll() []string {
-	entries, err := os.ReadDir(e.stateDir)
+	entries, err := os.ReadDir(e.stateDir())
 	if err != nil {
 		return nil
 	}
@@ -1181,6 +1188,7 @@ func (e *Engine) templateContextFor(bound workload.Workload) tmpl.Context {
 		IngressURLSuffix:    e.IngressURLSuffix,
 		MonitoringNamespace: e.MonitoringNamespace,
 		ProjectRoot:         e.ProjectRoot,
+		StateDir:            e.StateRoot,
 		LokiRetentionPeriod: lokiRetentionPeriod(),
 		IngressClass:        ingressClassOr(e.IngressClass),
 		WorkloadName:        w.Name,
@@ -1235,7 +1243,7 @@ func lokiRetentionPeriod() string {
 }
 
 func (e *Engine) isActive(name string) bool {
-	statePath := filepath.Join(e.stateDir, name+".active")
+	statePath := filepath.Join(e.stateDir(), name+".active")
 	_, err := os.Stat(statePath)
 	return err == nil
 }
@@ -1243,7 +1251,7 @@ func (e *Engine) isActive(name string) bool {
 // markActive writes the activation marker, recording the parameters and app
 // the scenario was activated with. Verify and Down read them back.
 func (e *Engine) markActive(name string, params map[string]string) error {
-	if err := os.MkdirAll(e.stateDir, 0755); err != nil {
+	if err := os.MkdirAll(e.stateDir(), 0755); err != nil {
 		return err
 	}
 	// With nothing to record, write the plain "active" marker.
@@ -1253,7 +1261,7 @@ func (e *Engine) markActive(name string, params map[string]string) error {
 			body = encoded
 		}
 	}
-	return os.WriteFile(filepath.Join(e.stateDir, name+".active"), body, 0644)
+	return os.WriteFile(filepath.Join(e.stateDir(), name+".active"), body, 0644)
 }
 
 // activationState is the JSON content of an .active marker. A marker may
@@ -1268,7 +1276,7 @@ type activationState struct {
 // activationRecord returns what a scenario was activated with, or the zero
 // value when it is inactive or its marker is the plain "active".
 func (e *Engine) activationRecord(name string) activationState {
-	data, err := os.ReadFile(filepath.Join(e.stateDir, name+".active"))
+	data, err := os.ReadFile(filepath.Join(e.stateDir(), name+".active"))
 	if err != nil {
 		return activationState{}
 	}
@@ -1283,7 +1291,7 @@ func (e *Engine) activationRecord(name string) activationState {
 // active. It is the marker file's modification time: Up writes the marker as
 // its last step, and a re-activation rewrites it.
 func (e *Engine) activationTime(name string) time.Time {
-	fi, err := os.Stat(filepath.Join(e.stateDir, name+".active"))
+	fi, err := os.Stat(filepath.Join(e.stateDir(), name+".active"))
 	if err != nil {
 		return time.Time{}
 	}
@@ -1301,7 +1309,7 @@ func (e *Engine) ActiveApp(name string) string { return e.activationRecord(name)
 
 func (e *Engine) markInactive(name string) {
 	// Best-effort: a missing marker already means inactive.
-	_ = os.Remove(filepath.Join(e.stateDir, name+".active"))
+	_ = os.Remove(filepath.Join(e.stateDir(), name+".active"))
 }
 
 func (e *Engine) printExploreHints(s *Scenario) {

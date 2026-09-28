@@ -35,6 +35,9 @@ type Context struct {
 	MonitoringNamespace string
 	// ProjectRoot is the absolute path to the repository/content root.
 	ProjectRoot string
+	// StateDir is the lab state directory, where scripts keep files that
+	// belong to the running lab rather than to the clone (e.g. backups).
+	StateDir string
 	// LokiRetentionPeriod is Loki's configured retention, e.g. "72h".
 	LokiRetentionPeriod string
 	// IngressClass is the ingress class name, e.g. "traefik".
@@ -82,6 +85,7 @@ func (c Context) Vars() map[string]string {
 		"IngressURLSuffix":    c.IngressURLSuffix,
 		"MonitoringNamespace": c.MonitoringNamespace,
 		"ProjectRoot":         c.ProjectRoot,
+		"StateDir":            c.StateDir,
 		"LokiRetentionPeriod": c.LokiRetentionPeriod,
 		"IngressClass":        c.IngressClass,
 		"WorkloadName":        c.WorkloadName,

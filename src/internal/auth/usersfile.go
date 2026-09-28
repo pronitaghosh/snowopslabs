@@ -13,7 +13,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// LoadUsersFile reads .labctl/users.yaml for editing. A missing file yields an
+// LoadUsersFile reads the users file for editing. A missing file yields an
 // empty UsersFile (so `users add` works on first use).
 func LoadUsersFile(path string) (*UsersFile, error) {
 	data, err := os.ReadFile(path)

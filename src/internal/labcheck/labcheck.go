@@ -57,6 +57,7 @@ func ScriptEnv(cfg *config.Config, w workload.Workload) []string {
 		"HTTP_PORT=" + cfg.HTTPPort,
 		"MONITORING_NAMESPACE=" + cfg.MonitoringNamespace,
 		"PROJECT_ROOT=" + cfg.ProjectRoot,
+		"LAB_STATE_DIR=" + cfg.StateDir,
 		// The same Prometheus, Grafana and Alertmanager the Go checks use.
 		"PROMETHEUS_URL=" + PrometheusURL(cfg),
 		"GRAFANA_URL=" + cfg.IngressURL("grafana"),

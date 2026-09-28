@@ -19,7 +19,7 @@ func newLabServer(t *testing.T) *Server {
 	t.Helper()
 	root := t.TempDir()
 	return &Server{
-		cfg:      &config.Config{ProjectRoot: root, DomainSuffix: "k3d.local", Profile: "k3d"},
+		cfg:      &config.Config{ProjectRoot: root, StateDir: t.TempDir(), DomainSuffix: "k3d.local", Profile: "k3d"},
 		registry: platform.NewRegistry(root),
 		scenes:   scenario.NewEngine(root, "k3d.local", "k3d"),
 	}
@@ -63,7 +63,7 @@ func TestHandleLabSnapshotTakeAndList(t *testing.T) {
 		t.Fatalf("take: got %d (%s)", w.Code, w.Body.String())
 	}
 
-	saved, err := lab.NewStore(s.cfg.ProjectRoot).Load("before-test")
+	saved, err := lab.NewStore(s.cfg.StateDir).Load("before-test")
 	if err != nil {
 		t.Fatalf("snapshot not persisted: %v", err)
 	}
@@ -101,7 +101,7 @@ func TestHandleLabReset_RequiresConfirmation(t *testing.T) {
 
 func TestHandleLabSnapshotDelete(t *testing.T) {
 	s := newLabServer(t)
-	store := lab.NewStore(s.cfg.ProjectRoot)
+	store := lab.NewStore(s.cfg.StateDir)
 	if err := store.Save(&lab.Snapshot{Name: "doomed", TakenAt: time.Now()}); err != nil {
 		t.Fatal(err)
 	}

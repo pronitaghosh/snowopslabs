@@ -295,7 +295,7 @@ func recordScenarioVerify(name string, results []checks.Result, startedAt time.T
 		objectives = s.Objectives
 	}
 	rec := resultspkg.NewScenarioRecord(name, "", objectives, checkOutcomes(results), startedAt, time.Now())
-	_ = resultspkg.NewStore(filepath.Join(cfg.ProjectRoot, ".labctl", "history")).Append(rec)
+	_ = resultspkg.NewStore(filepath.Join(cfg.StateDir, "history")).Append(rec)
 }
 
 // checkOutcomes converts check results to the form the results store records.

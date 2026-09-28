@@ -11,7 +11,7 @@ import (
 )
 
 func (s *Server) labStore() *lab.Store {
-	return lab.NewStore(s.cfg.ProjectRoot)
+	return lab.NewStore(s.cfg.StateDir)
 }
 
 func (s *Server) labDeps(continueOnError bool) lab.Deps {

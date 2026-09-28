@@ -147,7 +147,7 @@ Which profile is used comes from `PROFILE` (`k3d`, `kind` or `incluster`); see
 ## Snapshots and lab reset
 
 A snapshot records **intent** — which platform components, apps and scenarios
-are active — as a small YAML file in `.labctl/snapshots/`. It is not a copy of
+are active — as a small YAML file in `~/.snowops/state/<cluster>/snapshots/`. It is not a copy of
 cluster bytes. Restore replays the normal idempotent install paths.
 
 ```bash
@@ -160,7 +160,7 @@ labctl lab reset --yes                # non-interactive
 ```
 
 - **Snapshot sources** — platform components from labctl's install markers in
-  `.labctl/platform/`, scenarios from the scenario engine's state, apps by live
+  `~/.snowops/state/<cluster>/platform/`, scenarios from the scenario engine's state, apps by live
   kubectl probe. Anything installed outside labctl is not tracked.
 - **Restore order** — ingress, then monitoring, then the remaining platform
   components, then apps, then scenarios. Already-active pieces are skipped, so

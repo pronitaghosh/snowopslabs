@@ -822,7 +822,7 @@ something live state alone cannot see:
   contain.
 - Simulate loss: `kubectl -n <workload-ns> delete configmap restore-marker`
 - **Verify while it is lost** — that run is what grades the loss
-- Restore: `kubectl apply --server-side --force-conflicts -f .labctl/backups/<workload-ns>-latest.json`
+- Restore: `kubectl apply --server-side --force-conflicts -f ~/.snowops/state/<cluster>/backups/<workload-ns>-latest.json`
 - Then the hard half: `kubectl -n <workload-ns> delete deploy data-writer &&
   kubectl -n <workload-ns> delete pvc restore-data`, restore again, and run
   `observe-pv-data.sh` — the `boot-id` changed.

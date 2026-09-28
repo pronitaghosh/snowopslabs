@@ -41,8 +41,8 @@ func challengeEngine() *challenge.Engine {
 	root := cfg.ProjectRoot
 	return challenge.New(
 		filepath.Join(root, "challenges"),
-		filepath.Join(root, ".labctl", "challenges"),
-		filepath.Join(root, ".labctl", "history"),
+		filepath.Join(cfg.StateDir, "challenges"),
+		filepath.Join(cfg.StateDir, "history"),
 	)
 }
 

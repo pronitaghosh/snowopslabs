@@ -3,7 +3,6 @@
 package config
 
 import (
-	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -563,54 +562,151 @@ func TestHome(t *testing.T) {
 	}
 }
 
-func TestFindProjectRoot_InstalledLab(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("SNOWOPS_HOME", home)
-	lab := filepath.Join(home, "lab")
-	outside := t.TempDir()
-	t.Chdir(outside)
-
-	t.Run("nothing installed", func(t *testing.T) {
-		if _, err := findProjectRoot(); !errors.Is(err, ErrNoLab) {
-			t.Fatalf("err = %v, want ErrNoLab", err)
-		}
-	})
-
+// makeLab creates a directory that looks like a clone: scenarios/ and runtimes/.
+func makeLab(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
 	for _, d := range []string{"scenarios", "runtimes"} {
-		if err := os.MkdirAll(filepath.Join(lab, d), 0o755); err != nil {
+		if err := os.MkdirAll(filepath.Join(dir, d), 0o755); err != nil {
 			t.Fatal(err)
 		}
 	}
-	t.Run("falls back to the installed lab", func(t *testing.T) {
-		got, err := findProjectRoot()
-		if err != nil {
-			t.Fatal(err)
-		}
-		if got != lab {
-			t.Errorf("findProjectRoot = %q, want %q", got, lab)
-		}
-	})
+	return dir
 }
 
-func TestContentVersion(t *testing.T) {
+func TestFindProjectRoot(t *testing.T) {
+	cwdLab, envLab, recorded := makeLab(t), makeLab(t), makeLab(t)
+	outside := t.TempDir()
+	tests := []struct {
+		name     string
+		cwd      string
+		env      string
+		record   string
+		expected string
+		wantErr  string
+	}{
+		{name: "the clone around the working directory wins", cwd: filepath.Join(cwdLab, "scenarios"), env: envLab, record: recorded, expected: cwdLab},
+		{name: "snowops_lab_dir outside a clone", cwd: outside, env: envLab, record: recorded, expected: envLab},
+		{name: "the recorded clone", cwd: outside, record: recorded, expected: recorded},
+		{name: "snowops_lab_dir that is not a clone", cwd: outside, env: outside, wantErr: "is not a snowopslabs clone"},
+		{name: "a recorded clone that is gone", cwd: outside, record: filepath.Join(outside, "deleted"), wantErr: "is gone"},
+		{name: "nothing to find", cwd: outside, wantErr: "could not find your lab"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			home := t.TempDir()
+			t.Setenv("SNOWOPS_HOME", home)
+			t.Setenv("SNOWOPS_LAB_DIR", tt.env)
+			if tt.record != "" {
+				if err := os.WriteFile(filepath.Join(home, "lab-dir"), []byte(tt.record+"\n"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			t.Chdir(tt.cwd)
+
+			got, err := findProjectRoot()
+			if tt.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+					t.Fatalf("err = %v, want %q", err, tt.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got != tt.expected {
+				t.Errorf("findProjectRoot = %q, want %q", got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestLabVersion(t *testing.T) {
 	tests := []struct {
 		name     string
 		file     string
 		expected string
 	}{
-		{name: "installed release", file: "1.5.0\n", expected: "1.5.0"},
-		{name: "checkout has no version file", expected: ""},
+		{name: "release", file: "1.5.0\n", expected: "1.5.0"},
+		{name: "no lab_version file", expected: ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			root := t.TempDir()
 			if tt.file != "" {
-				if err := os.WriteFile(filepath.Join(root, "VERSION"), []byte(tt.file), 0o600); err != nil {
+				if err := os.WriteFile(filepath.Join(root, "LAB_VERSION"), []byte(tt.file), 0o600); err != nil {
 					t.Fatal(err)
 				}
 			}
-			if got := ContentVersion(root); got != tt.expected {
-				t.Errorf("ContentVersion = %q, want %q", got, tt.expected)
+			if got := LabVersion(root); got != tt.expected {
+				t.Errorf("LabVersion = %q, want %q", got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestStateDir(t *testing.T) {
+	t.Setenv("SNOWOPS_HOME", "/srv/snowops")
+	got, err := StateDir("lab")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := filepath.Join("/srv/snowops", "state", "lab"); got != want {
+		t.Errorf("StateDir = %q, want %q", got, want)
+	}
+}
+
+func TestMigrateState(t *testing.T) {
+	tests := []struct {
+		name       string
+		legacy     bool
+		target     bool
+		wantMoved  bool
+		wantErr    string
+		wantMarker string // where the legacy marker file must end up
+	}{
+		{name: "moves legacy state once", legacy: true, wantMoved: true, wantMarker: "target"},
+		{name: "nothing to move", target: true},
+		{name: "both exist", legacy: true, target: true, wantErr: "lab state is in both", wantMarker: "legacy"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			base := t.TempDir()
+			legacy := filepath.Join(base, "clone", ".labctl")
+			target := filepath.Join(base, "home", "state", "snowops")
+			if tt.legacy {
+				if err := os.MkdirAll(legacy, 0o755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(filepath.Join(legacy, "marker"), []byte("x"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if tt.target {
+				if err := os.MkdirAll(target, 0o755); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			moved, err := MigrateState(legacy, target)
+			if tt.wantErr == "" && err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if tt.wantErr != "" && (err == nil || !strings.Contains(err.Error(), tt.wantErr)) {
+				t.Fatalf("err = %v, want %q", err, tt.wantErr)
+			}
+			if moved != tt.wantMoved {
+				t.Errorf("moved = %v, want %v", moved, tt.wantMoved)
+			}
+			switch tt.wantMarker {
+			case "target":
+				if _, err := os.Stat(filepath.Join(target, "marker")); err != nil {
+					t.Errorf("state not in target: %v", err)
+				}
+			case "legacy":
+				if _, err := os.Stat(filepath.Join(legacy, "marker")); err != nil {
+					t.Errorf("legacy state touched: %v", err)
+				}
 			}
 		})
 	}

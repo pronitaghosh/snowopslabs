@@ -90,9 +90,11 @@ The user-facing content (`scenarios/`, `incidents/`, `apps/`, `platform/`,
 `runtimes/`) stays at the repo root (`runtimes/_lib/` holds the Docker helpers
 the runtimes and `bootstrap/setup-tools.sh` share). `labctl` finds it by walking
 up from the working directory (it keys on `scenarios/` + `runtimes/`), so it
-runs unchanged from a checkout even though the binary is built under `src/`;
-outside a checkout it uses the installed lab in `~/.snowops/lab` (`install.sh`
-puts a release's content there). `--project-dir` overrides both.
+runs unchanged from a checkout even though the binary is built under `src/`.
+Outside one it uses `SNOWOPS_LAB_DIR`, then the clone `install.sh` recorded in
+`~/.snowops/lab-dir`; `--project-dir` overrides all of them. Runtime state
+lives outside the clone, in `~/.snowops/state/<cluster>/`, so every clone on a
+machine sees the same state for its one cluster.
 
 `internal/cli` and `internal/httpapi` are deliberately dumb. If logic can be
 tested without a terminal or an HTTP request, it belongs in `internal/service`.

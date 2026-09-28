@@ -3,6 +3,7 @@
 package httpapi
 
 import (
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -16,7 +17,7 @@ func testBindServer(t *testing.T) *Server {
 	t.Helper()
 	root := t.TempDir()
 	return &Server{
-		cfg:       &config.Config{ProjectRoot: root},
+		cfg:       &config.Config{ProjectRoot: root, StateDir: filepath.Join(root, ".labctl")},
 		scenes:    &scenario.Engine{ProjectRoot: root, Workload: workload.Default("go-api")},
 		incidents: &incident.Engine{ProjectRoot: root, Workload: workload.Default("go-api")},
 	}
