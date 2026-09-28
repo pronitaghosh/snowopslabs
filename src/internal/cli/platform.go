@@ -68,8 +68,10 @@ func resolveProvider(category string) (string, error) {
 		names = append(names, p.Name)
 	}
 	envVar := strings.ToUpper(strings.ReplaceAll(category, "/", "_")) + "_PROVIDER"
-	return "", fmt.Errorf("category %q has multiple providers (%s); select one with %s",
-		category, strings.Join(names, ", "), envVar)
+	return "", fmt.Errorf("category %q has multiple providers (%s); pick one, either with\n"+
+		"  labctl platform up %s/%s\n"+
+		"or by setting %s=%s in .env",
+		category, strings.Join(names, ", "), category, names[0], envVar, names[0])
 }
 
 // resolveTarget turns a platform argument into a category and provider. The
