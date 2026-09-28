@@ -30,7 +30,17 @@ teardown() {
   assert_call_count k3d 1 "node create"
   assert_called k3d "node create lab-agent-1 --cluster lab --role agent"
   assert_called k3d "image import go-api:v1.2.0 --cluster lab"
-  assert_called kubectl "wait --for=condition=Ready node k3d-lab-agent-1"
+  assert_called kubectl "wait --for=condition=Ready node k3d-lab-agent-1-0"
+}
+
+@test "skips a name an earlier add already used" {
+  stub_stdout kubectl "node/k3d-lab-agent-0
+node/k3d-lab-agent-1-0"
+  cd "$WORK"
+  run bash runtimes/k3d/add-agents.sh 3
+  [ "$status" -eq 0 ]
+  assert_call_count k3d 1 "node create"
+  assert_called k3d "node create lab-agent-2 --cluster lab"
 }
 
 @test "does nothing when the cluster already has enough agents" {

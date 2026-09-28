@@ -36,14 +36,16 @@ added=""
 while [ "$current" -lt "$TOTAL" ]; do
   name="${CLUSTER_NAME}-agent-${i}"
   i=$((i + 1))
-  # k3d prefixes node names with "k3d-"; skip names already in use.
-  if agent_names | grep -qx "k3d-${name}"; then
+  # `k3d node create NAME` names the node k3d-NAME-0; init's agents are
+  # k3d-NAME. Skip a name either form already uses.
+  node="k3d-${name}-0"
+  if agent_names | grep -qx -e "k3d-${name}" -e "$node"; then
     continue
   fi
-  echo "Adding agent node k3d-${name}..."
+  echo "Adding agent node ${node}..."
   k3d node create "$name" --cluster "$CLUSTER_NAME" --role agent --wait --timeout 300s
-  docker exec "k3d-${name}" sysctl -w fs.inotify.max_user_instances=512 >/dev/null 2>&1 || true
-  added="$added k3d-${name}"
+  docker exec "$node" sysctl -w fs.inotify.max_user_instances=512 >/dev/null 2>&1 || true
+  added="$added $node"
   current=$((current + 1))
 done
 
