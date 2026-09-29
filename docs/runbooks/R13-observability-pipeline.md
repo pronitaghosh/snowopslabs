@@ -222,13 +222,17 @@ In **Grafana → Explore → Tempo**, search `service.name=go-api`.
 > logs look healthy. Check the datasource URL — Tempo's HTTP API is on **3200**.
 > A datasource on 3100 fails identically to "nothing was traced".
 >
-> **Failure signature:** every Loki and Tempo query answers `Unable to find
-> datasource plugin`. Grafana 13 re-installs its bundled Loki and Tempo plugins
-> at startup, which fails on the chart's read-only root filesystem and leaves
-> neither loaded. `platform/monitoring/grafana/values.yaml` sets
+> **Failure signature:** every Prometheus, Loki and Tempo query answers
+> `Unable to find datasource plugin`, and
+> `/api/datasources/uid/prometheus/health` answers `Plugin not registered`, so
+> every dashboard shows No data and its App and Namespace pickers are empty.
+> Grafana 13 re-installs its bundled datasource plugins at startup, which fails
+> on the chart's read-only root filesystem and leaves none of them loaded. `platform/monitoring/grafana/values.yaml` sets
 > `GF_PLUGINS_PREINSTALL_DISABLED` to skip that install; check it is still set,
 > and look for `Failed to install plugin` in
-> `kubectl -n monitoring logs deploy/grafana -c grafana`.
+> `kubectl -n monitoring logs deploy/grafana -c grafana`. `labctl init` runs
+> that health check and re-applies Grafana when it fails, since an existing lab
+> keeps the values its Grafana was first installed with.
 
 ---
 

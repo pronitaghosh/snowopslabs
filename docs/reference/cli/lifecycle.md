@@ -43,6 +43,12 @@ Building the lab, checking the machine, and reading back what labctl did.
   balancer (`k3d cluster edit --port-add`, no rebuild) and kind says how to
   change them. Checks reach lab hostnames on `127.0.0.1` directly, so grading
   needs no `/etc/hosts` entries and ignores `HTTP_PROXY`.
+- **Dashboards have data.** `init` then asks Grafana to query its Prometheus
+  datasource. If it cannot, `init` re-applies Grafana with the lab's current
+  values (an existing lab otherwise keeps the values it was installed with) and
+  checks again; if it still cannot, `init` exits with Grafana's reason. When
+  Grafana refuses the admin password, `init` says so and skips the check: set
+  `GRAFANA_ADMIN_PASSWORD` in `.env` to the password you chose.
 - **Names.** A cluster name is unique on a machine, across k3d and kind; the
   defaults are `snowops` (k3d) and `snowops-kind` (kind).
 

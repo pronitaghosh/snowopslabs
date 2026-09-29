@@ -63,7 +63,8 @@ labctl init
 
 colima does not start on its own. Run `labctl init`: it starts colima at the
 lab's size, restarts the cluster and waits until everything is Ready, keeping
-your apps and scenarios.
+your apps and scenarios. It also checks that Grafana can query Prometheus and
+repairs Grafana if not, so the dashboards have data when it says the lab is up.
 
 ## Uninstall
 

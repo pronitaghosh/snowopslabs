@@ -74,6 +74,9 @@ var initCmd = &cobra.Command{
 		if err := ensureIngressReachable(ctx, out); err != nil {
 			return err
 		}
+		if err := ensureGrafanaQueriesPrometheus(ctx, out); err != nil {
+			return err
+		}
 		printPostInitHints(out)
 		return nil
 	},

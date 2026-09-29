@@ -19,6 +19,11 @@ setup() {
 
   cat >"$STATE/monitoring-grafana.yaml" <<'EOF'
 metadata:
+  creationTimestamp: "2026-09-11T11:45:18Z"
+  generation: 1
+  name: grafana
+  resourceVersion: "736"
+  uid: 877f651b-32e0-47d2-8617-845bf3cd18e5
   annotations:
     note: http://grafana.k3d.local:8080/login
 spec:
@@ -72,4 +77,11 @@ teardown() {
   grep -q "host: grafana.k3d.localdomain" "$STATE/replaced"
   ! grep -q "go-api" "$STATE/replaced"
   [[ "$output" != *"apps/go-api"* ]]
+}
+
+@test "move-domain sends no server-set metadata, so a later kubectl apply still works" {
+  run bash "$ROOT/runtimes/_lib/move-domain.sh" lab k3d.local lab.localhost
+  [ "$status" -eq 0 ]
+  grep -q "^  name: grafana$" "$STATE/replaced"
+  ! grep -Eq "^  (resourceVersion|uid|creationTimestamp|generation):" "$STATE/replaced"
 }

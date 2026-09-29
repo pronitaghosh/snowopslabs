@@ -257,7 +257,10 @@ recovery:
    and points at `labctl reset`, which rebuilds from scratch on purpose.
 
 `labctl init` then skips platform installs that are already deployed and waits
-for their pods to be Ready. Measured on colima (2 CPU / 4 GB, 3 nodes, with
+for their pods to be Ready. Because a skipped install never picks up changed
+values, init's closing checks then ask Grafana to query Prometheus
+(`/api/datasources/uid/prometheus/health`) and re-apply Grafana when it cannot;
+if it still cannot, init stops with Grafana's reason instead of "Lab is up". Measured on colima (2 CPU / 4 GB, 3 nodes, with
 go-api and observability-sre active): three consecutive `colima stop` → `labctl
 init` cycles each recovered in about two minutes with the app, the scenario and
 every pod intact.

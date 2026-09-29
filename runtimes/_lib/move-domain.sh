@@ -23,6 +23,14 @@ rewrite_hosts() {
   sed -e "s/\.${old_re}\([^A-Za-z0-9.-]\)/.${NEW}\1/g" -e "s/\.${old_re}\$/.${NEW}/"
 }
 
+# strip_server_fields drops the metadata the API server sets. kubectl replace
+# copies the object it sends into an existing last-applied annotation, and a
+# later kubectl apply rejects an annotation that pins resourceVersion.
+strip_server_fields() {
+  sed -e '/^  resourceVersion:/d' -e '/^  uid:/d' \
+    -e '/^  creationTimestamp:/d' -e '/^  generation:/d'
+}
+
 # move_kind rewrites every resource of <kind> that names a host under <old>.
 # A kind the cluster does not serve (its CRD is not installed) is skipped.
 move_kind() {
@@ -36,7 +44,7 @@ move_kind() {
       *".$OLD"*) ;;
       *) continue ;;
     esac
-    printf '%s\n' "$manifest" | rewrite_hosts | kubectl replace -f - >/dev/null
+    printf '%s\n' "$manifest" | strip_server_fields | rewrite_hosts | kubectl replace -f - >/dev/null
     echo "  ${kind%%.*} ${ns}/${name}"
   done <<EOF
 $list
