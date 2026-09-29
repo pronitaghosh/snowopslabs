@@ -16,22 +16,36 @@ forget_cluster "$CLUSTER_NAME"
 
 echo -e "${YELLOW}Shutting down k3d cluster '${CLUSTER_NAME}'...${NC}"
 
-if ! k3d cluster list "$CLUSTER_NAME" &>/dev/null; then
+# cluster_containers lists the cluster's containers by the label k3d gives
+# them. After an unclean stop (a sleeping laptop, WSL shutting down) k3d can
+# fail to read a cluster whose containers still exist; asking k3d alone would
+# call it "not found" and leave them to collide with the next `labctl init`.
+cluster_containers() {
+  docker ps -aq --filter "label=k3d.cluster=${CLUSTER_NAME}" 2>/dev/null || true
+}
+
+if ! k3d cluster list "$CLUSTER_NAME" &>/dev/null && [ -z "$(cluster_containers)" ]; then
   echo -e "${YELLOW}Cluster '$CLUSTER_NAME' not found.${NC}"
   exit 0
 fi
 
-k3d cluster delete "$CLUSTER_NAME" || {
-  echo -e "${RED}Failed to delete cluster: $CLUSTER_NAME${NC}"
-  exit 1
-}
+k3d cluster delete "$CLUSTER_NAME" ||
+  echo -e "${YELLOW}k3d could not delete '$CLUSTER_NAME' cleanly; removing its containers directly.${NC}"
+
+leftover="$(cluster_containers)"
+if [ -n "$leftover" ]; then
+  # shellcheck disable=SC2086 # one container ID per word
+  docker rm -f $leftover >/dev/null || true
+  docker network rm "k3d-${CLUSTER_NAME}" >/dev/null 2>&1 || true
+fi
 
 echo -e "${YELLOW}Validating cluster shutdown...${NC}"
 
-if ! k3d cluster list "$CLUSTER_NAME" &>/dev/null; then
+if ! k3d cluster list "$CLUSTER_NAME" &>/dev/null && [ -z "$(cluster_containers)" ]; then
   echo -e "${GREEN}✓ Cluster '$CLUSTER_NAME' has been successfully shut down.${NC}"
   exit 0
 else
   echo -e "${RED}✗ Validation failed: cluster '$CLUSTER_NAME' still exists.${NC}"
+  echo "  Remove it by hand: k3d cluster delete $CLUSTER_NAME" >&2
   exit 1
 fi

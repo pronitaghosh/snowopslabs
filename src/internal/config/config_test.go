@@ -420,8 +420,11 @@ func TestMergeEnvFile_QuotedValueReachesConfig(t *testing.T) {
 
 // clearConfigEnv unsets the config keys for the duration of a test so file/real
 // env precedence can be asserted deterministically. t.Setenv restores them.
+// labctl's state moves to an empty temp dir too, so the ports and domain
+// recorded for a real lab on this machine never leak into the result.
 func clearConfigEnv(t *testing.T) {
 	t.Helper()
+	t.Setenv("SNOWOPS_HOME", t.TempDir())
 	for _, k := range []string{
 		"PROFILE", "CLUSTER_NAME", "DOMAIN_SUFFIX", "HTTP_PORT", "HTTPS_PORT",
 		"INGRESS_CLASS", "STORAGE_CLASS", "REGISTRY_TYPE", "MONITORING_NAMESPACE",

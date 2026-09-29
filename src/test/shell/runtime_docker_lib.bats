@@ -10,6 +10,10 @@ load 'helpers/stub'
 
 setup() {
   stub_setup
+  # Run on WSL, the real WSL_DISTRO_NAME and Windows programs would leak in;
+  # the WSL tests set what they need themselves.
+  unset WSL_DISTRO_NAME
+  export WINDOWS_PROGRAM_FILES="$STUB_DIR/no-windows"
   ROOT="$(project_root)"
   STATE="$STUB_DIR/state"
   mkdir -p "$STATE"

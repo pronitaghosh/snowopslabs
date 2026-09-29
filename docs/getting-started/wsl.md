@@ -37,6 +37,7 @@ What `init` tells you, and what to do:
 | Message | Do this |
 |---|---|
 | Docker Desktop is not enabled for this WSL distro | Docker Desktop → Settings → Resources → WSL Integration → enable your distro, Apply & Restart, reopen the terminal. |
+| Docker Desktop (or Rancher Desktop) is installed on Windows but not running | Start it on Windows, then reopen the terminal and run `labctl init` again. labctl will not install a second Docker engine next to it. |
 | added to the docker group | Run `wsl --shutdown` in PowerShell, reopen the terminal, run `labctl init` again. |
 | WSL is running without systemd | Docker will not start by itself. Add `[boot]` and `systemd=true` to `/etc/wsl.conf`, then `wsl --shutdown`; or run `sudo service docker start` in each session. |
 
@@ -56,8 +57,8 @@ then run `wsl --shutdown` in PowerShell and reopen the terminal.
 ## Opening the lab from Windows
 
 - **The dashboard** (`labctl ui`, `http://localhost:3939`) works in your Windows
-  browser as is. Install `wslu` (`sudo apt install wslu`) so `labctl ui` can
-  open it for you.
+  browser as is, and `labctl ui` opens it for you (through `powershell.exe`, or
+  `wslview` if you have `wslu`).
 - **Lab URLs** such as `http://grafana.snowops.localhost` open in your Windows
   browser as they are. The browser resolves `*.localhost` to Windows' own
   localhost, and WSL2 forwards Windows' localhost ports into the distro (Docker
@@ -69,8 +70,13 @@ then run `wsl --shutdown` in PowerShell and reopen the terminal.
 
 ## After a restart
 
-`wsl --shutdown` or a Windows restart stops the cluster. Run `labctl init`; it
-restarts the cluster in order and keeps your apps and scenarios.
+`wsl --shutdown` or a Windows restart stops the cluster. So does closing every
+WSL terminal: once no terminal is open, WSL stops the distro after a short idle
+time, and Docker and the cluster stop with it. Keep one WSL terminal open while
+you use the lab (the one running `labctl ui` is enough).
+
+When you come back, run `labctl init`; it restarts the cluster in order and
+keeps your apps and scenarios.
 
 ## Uninstall
 

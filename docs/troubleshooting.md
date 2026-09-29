@@ -38,16 +38,20 @@ page collects them by symptom. `labctl doctor` checks your machine, and
 | URLs end in `.k3d.local`, need `/etc/hosts` entries, or take 5 seconds to open on a Mac | The lab was built before URLs moved to `*.localhost` and keeps its names (macOS sends `.local` lookups to Bonjour, which is slow). `labctl hosts add` covers it; `labctl reset` rebuilds it with `*.localhost` names, which need nothing. |
 | `a kind cluster named 'snowops' already exists` (or k3d) | Lab names are unique per machine, because URLs and lab state are keyed by them. Set `CLUSTER_NAME` in `.env` to another name. |
 | A check says Prometheus or Grafana returned 404 | Another service on the lab's port answered instead of the lab. Re-run `labctl init`; it confirms the lab answers and moves it if not. |
+| Grafana's Loki or Tempo queries answer `Unable to find datasource plugin` | The lab's Grafana was installed before the fix for Grafana 13's plugin install on a read-only filesystem. Reinstall it: `labctl platform up monitoring/grafana`. |
 | An app pod is in `ImagePullBackOff` | Its image was not built into the cluster. `labctl app build <name>`, or use `--deploy-prereqs`. |
 
 ## Windows (WSL2)
 
 | Symptom | Fix |
 |---|---|
-| `labctl ui` does not open a browser | `sudo apt install wslu`, or open `http://localhost:3939` in your Windows browser. |
-| Lab hostnames work with `curl` in WSL but not in the Windows browser | The Windows browser reads the Windows hosts file. Add the same lines to `C:\Windows\System32\drivers\etc\hosts` as Administrator. |
+| `labctl ui` does not open a browser | Open `http://localhost:3939` in your Windows browser. labctl tries `wslview`, then `powershell.exe`; if WSL interop is off, neither can reach Windows. |
+| `*.k3d.local` hostnames work with `curl` in WSL but not in the Windows browser | The lab was built before URLs moved to `*.localhost`. A Windows browser reads the Windows hosts file, so either add the same lines to `C:\Windows\System32\drivers\etc\hosts` as Administrator, or `labctl reset` for `*.localhost` names. |
 | Scripts fail with `$'\r': command not found` | The clone is on a Windows drive, or was made with Git for Windows. Clone again inside WSL, in your Linux home (`cd ~`), with the distro's `git`, then `./install.sh`. |
 | Docker does not start after `wsl --shutdown` | WSL runs without systemd. Enable it in `/etc/wsl.conf` or run `sudo service docker start`. |
+| `Docker Desktop is installed on Windows but not running` (or Rancher Desktop) | Start it on Windows, reopen the terminal, `labctl init`. labctl will not install a second Docker engine beside it. |
+| The lab is unreachable after the laptop slept, or after every WSL terminal was closed | WSL stopped, and the cluster with it. Run `labctl init`. If it still fails, `labctl reset` rebuilds it; it removes the old cluster's containers even when k3d can no longer read them. |
+| The lab is slow or short of memory, and `docker ps` shows `k3d-…` containers of another cluster | An older k3d or kind cluster (from another project, or an older lab name) restarts with Docker and shares WSL's memory. List them with `docker ps --filter name=k3d-` (k3d may not list a half-broken one), and stop what you do not need with `k3d cluster stop <name>`, or `docker stop` on its containers. |
 
 ## Still stuck
 

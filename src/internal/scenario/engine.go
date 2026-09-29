@@ -847,11 +847,23 @@ func (e *Engine) installHelm(s *Scenario, comp *Component, exec CommandExecutor)
 	return err
 }
 
-// helmReleaseExists reports whether a release is already installed in ns.
+// helmReleaseExists reports whether a release, in any state, is already
+// installed in ns. It lists releases rather than asking `helm status`, which
+// prints "Error: release: not found" into the learner's output for the usual
+// case of a release that is not there yet.
 func helmReleaseExists(name, ns string, exec CommandExecutor) bool {
-	_, err := exec.RunCommandStreamed(
-		"Check for existing release "+name, "helm", "status", name, "--namespace", ns)
-	return err == nil
+	out, err := exec.RunCommandStreamed(
+		"Check for existing release "+name, "helm", "list", "--all", "--short",
+		"--filter", "^"+regexp.QuoteMeta(name)+"$", "--namespace", ns)
+	if err != nil {
+		return false
+	}
+	for line := range strings.SplitSeq(out, "\n") {
+		if strings.TrimSpace(line) == name {
+			return true
+		}
+	}
+	return false
 }
 
 // statefulSetImmutableRe matches the two error messages Helm gives when a

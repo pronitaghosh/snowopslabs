@@ -51,6 +51,15 @@ their changes. You need **Go 1.25+** and **Node 22+**. The steps are identical
 on macOS, Linux, and Windows/WSL2 — on Windows run them inside your WSL2
 distro, in your Linux home, never native PowerShell.
 
+Distro packages are often older than that (Ubuntu 24.04 ships Go 1.22 and an
+older Node). None of the fixes need sudo:
+
+- **Go**: with Go 1.21 or later installed, `export GOTOOLCHAIN=auto` and the
+  build downloads the Go version `src/go.mod` asks for.
+- **Node**: unpack the Node 22 tarball from nodejs.org under your home and put
+  its `bin/` first on `PATH` (or use a version manager such as nvm).
+- **bats** (for `make test-shell`): `npm install -g bats` with that Node.
+
 ```bash
 git clone https://github.com/sagar2395/snowopslabs.git
 cd snowopslabs

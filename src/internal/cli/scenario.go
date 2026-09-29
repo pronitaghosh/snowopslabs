@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"text/tabwriter"
 	"time"
 
@@ -319,8 +320,21 @@ func newCheckRunner() *checks.Runner {
 	return r
 }
 
+// printCheckResults prints one table row per check. A script check's error
+// often spans several lines (the diagnosis and the commands to run); inside the
+// table those lines would break its columns, so a row shows the first line and
+// the rest follows the table under the check's name.
 func printCheckResults(results []checks.Result) {
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	printCheckResultsTo(os.Stdout, results)
+}
+
+func printCheckResultsTo(out io.Writer, results []checks.Result) {
+	type more struct {
+		name  string
+		lines string
+	}
+	var details []more
+	w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
 	for _, r := range results {
 		mark := "PASS"
 		if !r.Pass {
@@ -337,11 +351,18 @@ func printCheckResults(results []checks.Result) {
 			detail = fmt.Sprintf("got: %s, want: %s", orDash(r.Got), orDash(r.Want))
 		}
 		if r.Error != "" {
-			detail = "error: " + r.Error
+			first, rest, _ := strings.Cut(strings.TrimRight(r.Error, "\n"), "\n")
+			detail = "error: " + first
+			if rest != "" {
+				details = append(details, more{r.Name, rest})
+			}
 		}
 		fmt.Fprintf(w, "%s\t%s\t(%s)\t%s\t%dms\n", mark, r.Name, r.Type, detail, r.DurationMS)
 	}
 	_ = w.Flush()
+	for _, d := range details {
+		fmt.Fprintf(out, "\n%s:\n%s\n", d.name, d.lines)
+	}
 }
 
 func orDash(s string) string {

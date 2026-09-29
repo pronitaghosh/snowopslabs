@@ -105,7 +105,7 @@ func TestWSLDoctorNotes(t *testing.T) {
 		want            string
 		notWant         string
 	}{
-		{name: "localhost needs no hosts file", suffix: "snowops.localhost", resolvesLocally: true, want: "No hosts-file edits are needed", notWant: `drivers\etc\hosts`},
+		{name: "localhost needs no hosts file", suffix: "snowops.localhost", resolvesLocally: true, want: "No hosts-file edits", notWant: `drivers\etc\hosts`},
 		{name: "another suffix needs the windows hosts file", suffix: "k3d.local", want: `drivers\etc\hosts`, notWant: "No hosts-file edits"},
 	}
 	for _, tt := range tests {
@@ -118,6 +118,18 @@ func TestWSLDoctorNotes(t *testing.T) {
 				t.Errorf("notes should show the lab's own hostname:\n%s", notes)
 			}
 		})
+	}
+}
+
+// Doctor prints each note as one bullet, so a wrapped note must continue
+// inside the same item rather than become a bullet of its own.
+func TestWSLDoctorNotesOneBulletPerNote(t *testing.T) {
+	for _, local := range []bool{true, false} {
+		for _, n := range wslDoctorNotes("/mnt/c/Users/me/snowopslabs", "snowops.localhost", local) {
+			if strings.TrimLeft(n, " ") != n {
+				t.Errorf("note starts with whitespace, so it would print as its own bullet: %q", n)
+			}
+		}
 	}
 }
 

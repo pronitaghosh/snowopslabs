@@ -65,19 +65,15 @@ is_wsl() {
   return 1
 }
 
-# maybe_wsl_notice — when on WSL, remind the user to install wslu (for wslview)
-# so `labctl ui` can hand URLs to the Windows browser, and point at the Windows
-# hosts-file caveat. Printed once at the end of setup; never fails the run.
+# maybe_wsl_notice — when on WSL, say that the dashboard and lab URLs open in
+# the Windows browser. `labctl ui` opens it through wslview or, without wslu,
+# powershell.exe, so nothing needs installing. Printed once at the end of
+# setup; never fails the run.
 maybe_wsl_notice() {
   is_wsl || return 0
   echo
-  echo -e "${YELLOW}WSL detected.${NC} A couple of Windows-specific tips:"
-  if ! command -v wslview >/dev/null 2>&1; then
-    echo -e "  - Install ${YELLOW}wslu${NC} so 'labctl ui' can open your Windows browser:"
-    echo "      sudo apt install -y wslu   # Debian/Ubuntu"
-  fi
-  echo "  - Lab URLs (e.g. http://grafana.snowops.localhost) open in your Windows browser directly;"
-  echo "    run 'labctl doctor' for the full WSL checklist."
+  echo -e "${YELLOW}WSL detected.${NC} The dashboard and lab URLs (e.g. http://grafana.snowops.localhost)"
+  echo "  open in your Windows browser. Run 'labctl doctor' for the full WSL checklist."
 }
 
 ensure_install_dir() {
@@ -339,6 +335,15 @@ install_docker_linux() {
   local problem
   if ! problem="$(docker_access_problem)"; then
     echo -e "${RED}ERROR: ${problem}${NC}" >&2
+    exit 1
+  fi
+  # On WSL, Docker Desktop or Rancher Desktop that is merely stopped looks like
+  # "no docker at all" from inside the distro: its CLI shim disappears too.
+  local app
+  if is_wsl && docker_cli_missing && app="$(windows_docker_app)"; then
+    echo -e "${RED}ERROR: ${app} is installed on Windows but not running.${NC}" >&2
+    echo "  Start ${app}, make sure its WSL Integration is enabled for '${WSL_DISTRO_NAME:-this distro}'," >&2
+    echo "  then reopen this terminal and re-run 'labctl init'." >&2
     exit 1
   fi
   if command -v docker &>/dev/null && is_wsl; then

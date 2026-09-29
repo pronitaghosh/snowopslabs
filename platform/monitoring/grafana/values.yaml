@@ -113,6 +113,14 @@ env:
   GF_SECURITY_ADMIN_USER: admin
   GF_AUTH_ANONYMOUS_ENABLED: "false"
   GF_USERS_ALLOW_SIGN_UP: "false"
+  # Grafana 13 ships Loki, Tempo and the other core datasources as bundled
+  # plugins and, by default, re-installs them into the image's plugins-bundled
+  # directory at startup. The chart runs Grafana with a read-only root
+  # filesystem, so that install fails and Loki and Tempo never load: every
+  # query through those datasources answers "Unable to find datasource plugin".
+  # The image already holds them, so skip the install and keep the filesystem
+  # read-only.
+  GF_PLUGINS_PREINSTALL_DISABLED: "true"
 
 # Resource limits
 resources:

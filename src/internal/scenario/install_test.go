@@ -225,7 +225,8 @@ func TestInstallManifest_RendersLabctlVarsOnly(t *testing.T) {
 type scriptedExec struct {
 	recordingExec
 	failures map[string]int    // command signature -> remaining failures
-	output   map[string]string // command signature -> combined output to return
+	output   map[string]string // command signature -> combined output of a failure
+	stdout   map[string]string // command signature -> output of a success
 }
 
 func (s *scriptedExec) RunCommandStreamed(label, name string, args ...string) (string, error) {
@@ -237,6 +238,9 @@ func (s *scriptedExec) RunCommandStreamed(label, name string, args ...string) (s
 	if n := s.failures[sig]; n > 0 {
 		s.failures[sig] = n - 1
 		return s.output[sig], errors.New("exit status 1")
+	}
+	if o, ok := s.stdout[sig]; ok {
+		return o, nil
 	}
 	return out, nil
 }
@@ -258,9 +262,9 @@ func TestHelm_AdoptSkipsInstallWhenReleaseExists(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			eng := newTestEngine(t)
 			eng.SetOutput(io.Discard)
-			rec := &scriptedExec{failures: map[string]int{}, output: map[string]string{}}
-			if !tt.releaseFound {
-				rec.failures["helm status"] = 1
+			rec := &scriptedExec{failures: map[string]int{}, output: map[string]string{}, stdout: map[string]string{}}
+			if tt.releaseFound {
+				rec.stdout["helm list"] = "loki\n"
 			}
 			comp := &Component{Name: "loki", Type: "helm", Chart: "grafana/loki", Adopt: tt.adopt}
 
@@ -270,6 +274,36 @@ func TestHelm_AdoptSkipsInstallWhenReleaseExists(t *testing.T) {
 			gotInstall := rec.find("helm", "upgrade") != nil
 			if gotInstall != tt.wantInstall {
 				t.Errorf("helm upgrade ran = %v, want %v (calls: %v)", gotInstall, tt.wantInstall, rec.calls)
+			}
+		})
+	}
+}
+
+// Only a release of exactly that name counts, and a failed listing means
+// "not installed".
+func TestHelmReleaseExists(t *testing.T) {
+	tests := []struct {
+		name   string
+		stdout string
+		fail   bool
+		want   bool
+	}{
+		{"listed", "loki\n", false, true},
+		{"not listed", "", false, false},
+		{"only a longer name", "loki-canary\n", false, false},
+		{"helm fails", "", true, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rec := &scriptedExec{failures: map[string]int{}, stdout: map[string]string{"helm list": tt.stdout}}
+			if tt.fail {
+				rec.failures["helm list"] = 1
+			}
+			if got := helmReleaseExists("loki", "monitoring", rec); got != tt.want {
+				t.Errorf("helmReleaseExists = %v, want %v", got, tt.want)
+			}
+			if call := rec.find("helm", "list"); flagValue(call, "--filter") != "^loki$" {
+				t.Errorf("filter must match the exact name, got call %v", call)
 			}
 		})
 	}

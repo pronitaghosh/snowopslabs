@@ -175,6 +175,31 @@ docker_recovers_after_restart() {
   refute_called k3d "cluster delete"
 }
 
+@test "k3d down removes a cluster's containers that k3d can no longer read" {
+  # After an unclean stop k3d fails to read the cluster, yet its containers
+  # remain and would collide with the next init. `docker ps` lists them until
+  # `docker rm` removes them.
+  stub_when k3d "cluster list" 1
+  stub_when k3d "cluster delete" 1
+  mv "$STUB_BIN/docker" "$STUB_BIN/docker.rec"
+  {
+    echo '#!/usr/bin/env bash'
+    echo "\"$STUB_BIN/docker.rec\" \"\$@\""
+    echo 'case "$1" in'
+    echo "  rm) touch \"$STUB_DIR/removed\" ;;"
+    echo "  ps) [ -f \"$STUB_DIR/removed\" ] || echo abc123 ;;"
+    echo 'esac'
+  } >"$STUB_BIN/docker"
+  chmod +x "$STUB_BIN/docker"
+
+  run bash "$ROOT/runtimes/k3d/down.sh" testcluster
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"not found"* ]]
+  assert_called docker "ps -aq --filter label=k3d.cluster=testcluster"
+  assert_called docker "rm -f abc123"
+  assert_called docker "network rm k3d-testcluster"
+}
+
 # --- kind -------------------------------------------------------------------
 
 @test "kind up skips creation when the cluster already exists" {

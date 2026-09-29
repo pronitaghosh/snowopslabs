@@ -221,6 +221,14 @@ In **Grafana → Explore → Tempo**, search `service.name=go-api`.
 > **Failure signature:** every Tempo query errors or returns nothing while Alloy
 > logs look healthy. Check the datasource URL — Tempo's HTTP API is on **3200**.
 > A datasource on 3100 fails identically to "nothing was traced".
+>
+> **Failure signature:** every Loki and Tempo query answers `Unable to find
+> datasource plugin`. Grafana 13 re-installs its bundled Loki and Tempo plugins
+> at startup, which fails on the chart's read-only root filesystem and leaves
+> neither loaded. `platform/monitoring/grafana/values.yaml` sets
+> `GF_PLUGINS_PREINSTALL_DISABLED` to skip that install; check it is still set,
+> and look for `Failed to install plugin` in
+> `kubectl -n monitoring logs deploy/grafana -c grafana`.
 
 ---
 

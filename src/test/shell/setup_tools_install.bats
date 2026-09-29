@@ -9,6 +9,9 @@ load 'helpers/stub'
 
 setup() {
   stub_setup
+  # Run on WSL, the real WSL_DISTRO_NAME would turn every Linux test into a WSL
+  # one; the WSL tests set it themselves.
+  unset WSL_DISTRO_NAME
   ROOT="$(project_root)"
   export HOME="$STUB_DIR/home"
   mkdir -p "$HOME"
@@ -142,6 +145,28 @@ EOF
   [ "$status" -eq 1 ]
   [[ "$output" == *"WSL Integration"* ]]
   ! grep -q "apt-get" "$CALLS" 2>/dev/null
+}
+
+@test "WSL: a stopped Docker Desktop is named, and no second engine is installed" {
+  export WINDOWS_PROGRAM_FILES="$STUB_DIR/pf"
+  mkdir -p "$WINDOWS_PROGRAM_FILES/Docker/Docker"
+  touch "$WINDOWS_PROGRAM_FILES/Docker/Docker/Docker Desktop.exe"
+  # No daemon answers, whatever docker the machine running the test has.
+  cat >"$STUB_BIN/docker" <<'EOF'
+#!/usr/bin/env bash
+echo "Cannot connect to the Docker daemon at unix:///var/run/docker.sock." >&2
+exit 1
+EOF
+  chmod +x "$STUB_BIN/docker"
+  # While Docker Desktop is stopped its docker shim is gone from the distro.
+  without_docker_cli() {
+    docker_cli_missing() { return 0; }
+    "$@"
+  }
+  WSL_DISTRO_NAME=Ubuntu run setup_tools Linux without_docker_cli install_docker_linux
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Docker Desktop is installed on Windows but not running"* ]]
+  ! grep -q "sudo" "$CALLS" 2>/dev/null
 }
 
 @test "linux: a stale docker-group session is explained, not waited on" {

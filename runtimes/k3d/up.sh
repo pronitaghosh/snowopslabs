@@ -47,7 +47,7 @@ normalize_apiserver_host() {
   [ -n "$server" ] || return 0
   fixed="${server//0.0.0.0/127.0.0.1}"
   if [ "$server" != "$fixed" ]; then
-    echo "Rewriting API server ${server} -> ${fixed} for reliable access on macOS."
+    echo "Pointing kubectl at ${fixed} (k3d wrote ${server})."
     kubectl config set-cluster "$ctx" --server="$fixed" >/dev/null
   fi
 }

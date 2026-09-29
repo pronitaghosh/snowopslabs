@@ -35,9 +35,13 @@ func grafanaServer(t *testing.T, status int, body string) string {
 }
 
 // withLab points the package config at a lab with the given profile whose
-// ingress listens on port.
+// ingress listens on port. HTTP_PORT names the same port and labctl's state
+// lives in a temp SNOWOPS_HOME, so reloadIngress never falls back to
+// port 80, where a real lab on this machine would answer.
 func withLab(t *testing.T, profile, port string) {
 	t.Helper()
+	t.Setenv("SNOWOPS_HOME", t.TempDir())
+	t.Setenv("HTTP_PORT", port)
 	oldCfg, oldExec, oldWait := cfg, scriptExec, ingressWait
 	t.Cleanup(func() { cfg, scriptExec, ingressWait = oldCfg, oldExec, oldWait })
 	root := t.TempDir()

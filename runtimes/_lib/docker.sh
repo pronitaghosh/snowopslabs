@@ -77,6 +77,28 @@ docker_access_problem() {
   return 0
 }
 
+# docker_cli_missing — succeed when no docker CLI is on PATH. A function so
+# tests can stand in for a machine without one.
+docker_cli_missing() {
+  ! command -v docker >/dev/null 2>&1
+}
+
+# windows_docker_app prints the name of a Docker app installed on the Windows
+# side of WSL (Docker Desktop or Rancher Desktop), and fails when there is none.
+# While such an app is stopped, its docker CLI vanishes from the distro, so the
+# lab must ask the user to start it rather than install a second engine that
+# would fight it for /var/run/docker.sock. WINDOWS_PROGRAM_FILES is for tests.
+windows_docker_app() {
+  local pf="${WINDOWS_PROGRAM_FILES:-/mnt/c/Program Files}"
+  if [ -e "$pf/Docker/Docker/Docker Desktop.exe" ]; then
+    echo "Docker Desktop"
+  elif [ -e "$pf/Rancher Desktop/Rancher Desktop.exe" ]; then
+    echo "Rancher Desktop"
+  else
+    return 1
+  fi
+}
+
 # ensure_docker_running — make the daemon answer, starting colima on macOS.
 ensure_docker_running() {
   if docker info >/dev/null 2>&1; then
@@ -101,8 +123,14 @@ ensure_docker_running() {
   if [ "$(uname -s)" = "Darwin" ]; then
     echo "  Start Docker Desktop (open -a Docker), or install colima: brew install colima docker" >&2
   elif [ -n "${WSL_DISTRO_NAME:-}" ]; then
-    echo "  Start Docker Desktop on Windows and enable Settings → Resources → WSL Integration" >&2
-    echo "  for this distro, or start a native daemon: sudo service docker start" >&2
+    local app
+    if docker_cli_missing && app="$(windows_docker_app)"; then
+      echo "  ${app} is installed on Windows but not running. Start it, make sure its" >&2
+      echo "  WSL Integration is enabled for '${WSL_DISTRO_NAME}', then re-run 'labctl init'." >&2
+    else
+      echo "  Start Docker Desktop on Windows and enable Settings → Resources → WSL Integration" >&2
+      echo "  for this distro, or start a native daemon: sudo service docker start" >&2
+    fi
   else
     echo "  sudo systemctl start docker" >&2
   fi
