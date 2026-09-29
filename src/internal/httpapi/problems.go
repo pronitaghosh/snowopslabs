@@ -65,6 +65,7 @@ var knownProblemSlugs = []string{
 	"invalid_input",
 	"invalid_kind",
 	"invalid_request",
+	"method_not_allowed",
 	"no_active_incident",
 	"no_checks",
 	"no_eligible_fault",

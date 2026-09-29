@@ -84,7 +84,7 @@ bin/labctl scenario up observability-sre
 Other targets:
 
 ```bash
-make cli-install   # build labctl and install it over the one install.sh put in ~/.local/bin
+make cli-install   # build labctl, install it over the one install.sh put in ~/.local/bin, and record this clone as the lab
 make ui-dev        # serve src/ui/dist live without rebuilding Go (LABCTL_UI_DIR)
 make docs-check    # the docs agree with the code and the website's manifest
 make fmt           # gofmt the tree
@@ -92,8 +92,8 @@ make fmt           # gofmt the tree
 
 `labctl` finds the lab in this order: `--project-dir`; the clone around the
 working directory (it walks up to the directory with `scenarios/` and
-`runtimes/`); `SNOWOPS_LAB_DIR`; and the clone `install.sh` last recorded in
-`~/.snowops/lab-dir`. Inside your checkout your edits take effect without
+`runtimes/`); `SNOWOPS_LAB_DIR`; and the clone `install.sh` or `make cli-install` last
+recorded in `~/.snowops/lab-dir`. Inside your checkout your edits take effect without
 reinstalling. Lab state (active scenarios, history, progress, snapshots) lives
 in `~/.snowops/state/<cluster>/`, outside every clone, so all of them see the
 same cluster. `main` carries a `-dev` `LAB_VERSION`, and a release `labctl`

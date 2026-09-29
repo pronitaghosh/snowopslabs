@@ -181,3 +181,50 @@ func TestClientAddr(t *testing.T) {
 		}
 	}
 }
+
+// A request under /api/v2 that no route serves answers problem+json with a
+// request ID, never the SPA shell; paths outside /api/v2 still get the SPA.
+func TestAPIVersion_UnmatchedRequestsAnswerProblems(t *testing.T) {
+	tests := []struct {
+		name       string
+		method     string
+		path       string
+		wantStatus int
+		wantType   string
+	}{
+		{name: "unknown route", method: http.MethodGet, path: "/api/v2/nope", wantStatus: http.StatusNotFound, wantType: "not_found"},
+		{name: "unknown nested route", method: http.MethodGet, path: "/api/v2/apps/x/nope/deeper", wantStatus: http.StatusNotFound, wantType: "not_found"},
+		{name: "known route, wrong method", method: http.MethodDelete, path: "/api/v2/challenges/status",
+			wantStatus: http.StatusMethodNotAllowed, wantType: "method_not_allowed"},
+		{name: "a route early in the table, wrong method", method: http.MethodDelete, path: "/api/v2/status",
+			wantStatus: http.StatusMethodNotAllowed, wantType: "method_not_allowed"},
+		{name: "a UI route stays with the SPA", method: http.MethodGet, path: "/scenarios/nope"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := newChallengeServer(t)
+			s.setupRoutes()
+			w := httptest.NewRecorder()
+			s.router.ServeHTTP(w, httptest.NewRequest(tt.method, tt.path, nil))
+
+			if tt.wantStatus != 0 && w.Code != tt.wantStatus {
+				t.Fatalf("%s %s = %d, want %d", tt.method, tt.path, w.Code, tt.wantStatus)
+			}
+			if tt.wantType == "" {
+				if strings.Contains(w.Header().Get("Content-Type"), "json") {
+					t.Errorf("%s served JSON; the SPA should answer it", tt.path)
+				}
+				return
+			}
+			if ct := w.Header().Get("Content-Type"); ct != problemContentType {
+				t.Errorf("content-type = %q, want %q", ct, problemContentType)
+			}
+			if !strings.Contains(w.Body.String(), problemType(tt.wantType)) {
+				t.Errorf("body should carry type %q:\n%s", tt.wantType, w.Body.String())
+			}
+			if w.Header().Get(requestIDHeader) == "" {
+				t.Errorf("expected a %s header", requestIDHeader)
+			}
+		})
+	}
+}

@@ -9,7 +9,7 @@ page collects them by symptom. `labctl doctor` checks your machine, and
 | Symptom | Cause and fix |
 |---|---|
 | `labctl: command not found` after installing | `~/.local/bin` is not on your `PATH`. Add `export PATH="$HOME/.local/bin:$PATH"` to `~/.bashrc` or `~/.zshrc` and open a new terminal. |
-| `could not find your lab` | labctl does not know where your clone is. Run `./install.sh` in your clone once (it records it), `cd` into the clone, or set `SNOWOPS_LAB_DIR`. |
+| `could not find your lab` | labctl does not know where your clone is. Run `./install.sh` in your clone once (it records it; `make cli-install` does the same for a source build), `cd` into the clone, or set `SNOWOPS_LAB_DIR`. |
 | `the lab recorded in ~/.snowops/lab-dir … is gone` | You moved or deleted your clone. Run `./install.sh` in its new place. |
 | `labctl is X but the lab in … is Y` | Your clone moved to another release (for example after `git merge origin/stable`). Run `./install.sh` in the clone to get the matching labctl. |
 | `… is development content` | You cloned `main`. Clone `--branch stable`, or `git switch stable`, then `./install.sh`. |

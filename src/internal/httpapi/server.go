@@ -382,6 +382,45 @@ func (s *Server) registerAPI(api *mux.Router) {
 
 	api.HandleFunc("/ws", s.handleWebSocket)
 	api.HandleFunc("/stream", s.handleStreamSSE).Methods("GET", "OPTIONS")
+
+	// Without this, a request no route serves falls through to the SPA and
+	// answers HTML with a 200.
+	unmatched := s.unmatchedAPI(api)
+	api.NotFoundHandler = unmatched
+	api.MethodNotAllowedHandler = unmatched
+}
+
+// unmatchedAPI answers an /api/v2 request that no route serves with a
+// problem+json error: 405 when the path serves other methods, else 404. mux
+// skips route middleware for these requests, so it applies the request ID,
+// access log and CORS middleware itself.
+func (s *Server) unmatchedAPI(api *mux.Router) http.Handler {
+	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if pathServesOtherMethod(api, r) {
+			respondError(w, r, http.StatusMethodNotAllowed, "method_not_allowed", "this /api/v2 route does not accept "+r.Method)
+			return
+		}
+		respondError(w, r, http.StatusNotFound, "not_found", "no /api/v2 route matches this path")
+	})
+	return s.requestIDMiddleware(s.accessLogMiddleware(corsMiddleware(h)))
+}
+
+// pathServesOtherMethod reports whether a route in api matches r's path under
+// another method. It asks each route directly, because mux loses a method
+// mismatch once later routes have been tried.
+func pathServesOtherMethod(api *mux.Router, r *http.Request) bool {
+	for _, method := range []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete} {
+		if method == r.Method {
+			continue
+		}
+		probe := r.Clone(r.Context())
+		probe.Method = method
+		var match mux.RouteMatch
+		if api.Match(probe, &match) && match.MatchErr == nil {
+			return true
+		}
+	}
+	return false
 }
 
 func originAllowed(r *http.Request) bool {

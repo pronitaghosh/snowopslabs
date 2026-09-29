@@ -36,7 +36,10 @@ There is no unversioned `/api`; a request there gets the SPA shell, not JSON
 Conventions, from [ADR-0006](../../adr/0006-api-conventions.md):
 
 - **Errors are `application/problem+json`.** Branch on the `type` slug, never on
-  the message. The human-readable cause is in `detail`.
+  the message. The human-readable cause is in `detail`. A path under `/api/v2`
+  that no route serves answers `404` with `not_found`, and a route called with a
+  method it does not accept answers `405` with `method_not_allowed`; neither
+  gets the SPA shell.
 - **List collections are paginated**: `{items, nextCursor}`, with `?limit` (max
   200) and an opaque `?cursor`. Page until `nextCursor` comes back empty.
 - **Catalog reads carry an `ETag`** and honour `If-None-Match` (→ 304).
