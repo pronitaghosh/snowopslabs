@@ -45,6 +45,10 @@ type Config struct {
 	RegistryType        string
 	MonitoringNamespace string
 
+	// DomainSuffixPinned reports that the user set DOMAIN_SUFFIX in the
+	// environment or .env, so labctl never moves the lab to another suffix.
+	DomainSuffixPinned bool
+
 	// Provider selections
 	IngressProvider     string
 	MetricsProvider     string
@@ -115,6 +119,7 @@ func Load(projectRoot string) (*Config, error) {
 	// wins over runtime.env.
 	fileVals := map[string]string{}
 	mergeEnvFile(fileVals, filepath.Join(projectRoot, ".env"))
+	cfg.DomainSuffixPinned = resolveEnv(fileVals, "DOMAIN_SUFFIX", "") != ""
 
 	// The profile selects which runtime.env to load and may itself be set in
 	// .env or the real environment.

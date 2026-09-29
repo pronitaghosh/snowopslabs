@@ -29,6 +29,11 @@ Each profile is a directory `runtimes/<name>/` containing exactly:
 | `remove-agents.sh` | no | Shrink the running cluster towards `<total>` agent nodes, removing only the agents `add-agents.sh` created. A node holding a local volume, or whose pods cannot be drained, stays. labctl calls it after `scenario down`, with the most agents any active scenario still needs and never fewer than `AGENTS`. |
 | `move-ingress.sh` | no | Add free host ports to the running cluster's ingress and record them in `~/.snowops/clusters/<name>.env`. `labctl init` calls it when the lab's Grafana does not answer through the recorded port from this machine. Only k3d has one (`k3d cluster edit --port-add`); kind cannot add ports to a running cluster. |
 
+Scripts every local profile shares live in `runtimes/_lib/`: `docker.sh` (sourced
+helpers for the Docker engine and the cluster record) and `move-domain.sh`
+(`<cluster> <old> <new>`: rewrite the lab's hostnames to a new suffix in place,
+which `labctl init` runs for a lab on a legacy default suffix).
+
 `internal/runtime` discovers a profile by the presence of `up.sh`; a directory
 without it is not a runtime. `up.sh`/`down.sh` are run through the executor from
 the project root and receive configuration through the environment (golden rule
@@ -53,6 +58,12 @@ the project root and receive configuration through the environment (golden rule
   busy it falls back to free ports (8080/8443 and up), and labctl reads this
   record so every URL, printed hint and check uses the real port. `down.sh`
   removes the record.
+- The record also holds the lab's **domain suffix**, which it keeps across
+  restarts. A lab still on a legacy default (`k3d.local`, `kind.local`) is moved
+  to `<cluster>.localhost` by `labctl init`: `runtimes/_lib/move-domain.sh`
+  rewrites the hosts of every Ingress, Traefik IngressRoute and cert-manager
+  Certificate, then the record. A `DOMAIN_SUFFIX` set in the environment or
+  `.env` is never moved.
 
 ### runtime.env keys
 
@@ -62,7 +73,7 @@ Every profile defines the same keys so downstream scripts can rely on them:
 |---|---|---|---|---|
 | `INGRESS_CLASS` | `traefik` | `nginx` | `traefik` | Ingress controller the platform installs and routes through. |
 | `STORAGE_CLASS` | `local-path` | `standard` | `standard` | Default `StorageClass` for PVCs. |
-| `DOMAIN_SUFFIX` | `snowops.localhost` | `kind.local` | `cluster.local` | Host suffix for ingress routes; content templates read `{{.DomainSuffix}}` for hostnames and `{{.IngressURLSuffix}}` (suffix plus a non-default port) for URLs. |
+| `DOMAIN_SUFFIX` | `<cluster>.localhost` | `<cluster>.localhost` | `cluster.local` | Host suffix for ingress routes; content templates read `{{.DomainSuffix}}` for hostnames and `{{.IngressURLSuffix}}` (suffix plus a non-default port) for URLs. |
 | `REGISTRY_TYPE` | `k3d-import` | `kind-load` | `none` | How locally-built app images reach the cluster. |
 
 A new profile is added by creating `runtimes/<name>/` with these three files and

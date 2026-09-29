@@ -261,7 +261,7 @@ The errors say what to do. The common ones:
 | The dashboard or `labctl status` says the cluster is unreachable | Docker or colima is stopped, usually after a reboot. Run `labctl init`. |
 | `Not enough memory for <scenario>` | Run the commands it prints to free memory (bring a scenario down, remove components nothing uses), or resize Docker as printed. |
 | URLs end in `:8080` | Something else already uses port 80, so the lab moved to 8080. Every URL and check follows it. |
-| URLs end in `.k3d.local`, need `/etc/hosts` entries, or take 5 seconds to open on a Mac | The lab was built before URLs moved to `*.localhost`, and it keeps its names. `labctl hosts add` covers it for now; `labctl reset` rebuilds it with `*.localhost` names, which need nothing. |
+| URLs end in `.k3d.local`, need `/etc/hosts` entries, or take 5 seconds to open on a Mac | The lab was built before URLs moved to `*.localhost`. Run `labctl init`: it moves the lab to `*.localhost` names in place, keeping your apps and scenarios, and those names need nothing. |
 | `could not find your lab` | Run `./install.sh` in your clone once, or `cd` into it. |
 | `labctl is X but the lab in … is Y` | Run `./install.sh` in your clone. |
 

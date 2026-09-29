@@ -68,6 +68,9 @@ var initCmd = &cobra.Command{
 		if err := checkClusterHealthy(ctx, out); err != nil {
 			return err
 		}
+		if err := moveLegacyDomain(out); err != nil {
+			return err
+		}
 		if err := ensureIngressReachable(ctx, out); err != nil {
 			return err
 		}

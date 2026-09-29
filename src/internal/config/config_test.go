@@ -751,3 +751,56 @@ func TestMigrateState(t *testing.T) {
 		})
 	}
 }
+
+// Only a suffix the user set, in the environment or .env, pins the lab to it;
+// one from runtime.env or the cluster record is a default labctl may move.
+func TestLoad_DomainSuffixPinned(t *testing.T) {
+	tests := []struct {
+		name       string
+		env        string
+		dotEnv     string
+		runtimeEnv string
+		record     string
+		want       bool
+	}{
+		{name: "nothing set"},
+		{name: "set in .env", dotEnv: "DOMAIN_SUFFIX=k3d.local\n", want: true},
+		{name: "set in the environment", env: "k3d.local", want: true},
+		{name: "only in runtime.env", runtimeEnv: "DOMAIN_SUFFIX=k3d.local\n"},
+		{name: "only in the cluster record", record: "DOMAIN_SUFFIX=k3d.local\n"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			clearConfigEnv(t)
+			if tt.env != "" {
+				t.Setenv("DOMAIN_SUFFIX", tt.env)
+			}
+			root := t.TempDir()
+			write := func(path, body string) {
+				t.Helper()
+				if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			write(filepath.Join(root, "runtimes", "k3d", "runtime.env"), tt.runtimeEnv)
+			write(filepath.Join(root, ".env"), tt.dotEnv)
+			if tt.record != "" {
+				file, err := ClusterStateFile("snowops")
+				if err != nil {
+					t.Fatal(err)
+				}
+				write(file, tt.record)
+			}
+			cfg, err := Load(root)
+			if err != nil {
+				t.Fatalf("Load: %v", err)
+			}
+			if cfg.DomainSuffixPinned != tt.want {
+				t.Errorf("DomainSuffixPinned = %v, want %v", cfg.DomainSuffixPinned, tt.want)
+			}
+		})
+	}
+}

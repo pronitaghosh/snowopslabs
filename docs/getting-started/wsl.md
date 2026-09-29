@@ -63,10 +63,11 @@ then run `wsl --shutdown` in PowerShell and reopen the terminal.
   browser as they are. The browser resolves `*.localhost` to Windows' own
   localhost, and WSL2 forwards Windows' localhost ports into the distro (Docker
   Desktop publishes them on Windows directly). Nothing goes in a hosts file.
-- A lab built before URLs moved to `*.localhost` keeps its `*.k3d.local` names,
+- A lab built before URLs moved to `*.localhost` has `*.k3d.local` names,
   which a Windows browser looks up in the Windows hosts file
-  (`C:\Windows\System32\drivers\etc\hosts`), not WSL's. `labctl reset`
-  rebuilds it with `*.localhost` names.
+  (`C:\Windows\System32\drivers\etc\hosts`), not WSL's. Run `labctl init`:
+  it moves the lab to `*.localhost` names in place and keeps your apps and
+  scenarios.
 
 ## After a restart
 

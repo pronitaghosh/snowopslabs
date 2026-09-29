@@ -6,7 +6,7 @@ Building the lab, checking the machine, and reading back what labctl did.
 
 | Command | What it does |
 |---|---|
-| `labctl init` | Install tools, start Docker at the lab's size, check Docker's resources, create the cluster, install the platform, then check the cluster is healthy. Safe to re-run: it is also how the lab comes back after a reboot. |
+| `labctl init` | Install tools, start Docker at the lab's size, check Docker's resources, create the cluster, install the platform, then check the cluster is healthy. A lab still on the old `*.k3d.local` or `*.kind.local` hostnames moves to `*.localhost` in place. Safe to re-run: it is also how the lab comes back after a reboot. |
 | `labctl teardown` | Deactivate scenarios and incidents, destroy apps, remove the platform, delete the cluster. |
 | `labctl reset` | `teardown` followed by `init`. |
 | `labctl status` | Cluster info, platform health and deployed apps in one view. When the cluster is configured but not answering it says so, with the reason, instead of listing everything as not installed. |
@@ -105,9 +105,11 @@ labctl check ingress    # the ingress controller is running and responding
 Lab URLs use `<service>.<cluster>.localhost` (for example
 `grafana.snowops.localhost`) by default, and every browser resolves
 `*.localhost` to this machine, so a default lab needs no hosts entries and
-`hosts add` says so and does nothing. It is for a lab with another suffix: one
-built before the `.localhost` default (`*.k3d.local`), or a `DOMAIN_SUFFIX` you
-set. It manages a labctl-owned block in `/etc/hosts` so those hostnames
+`hosts add` says so and does nothing. It is for a lab with a `DOMAIN_SUFFIX`
+you set. A lab built before the `.localhost` default (`*.k3d.local` or
+`*.kind.local`) needs none either: `labctl init` moves it to
+`<cluster>.localhost` in place, unless `DOMAIN_SUFFIX` is set in the
+environment or `.env`. It manages a labctl-owned block in `/etc/hosts` so those hostnames
 resolve; the block is delimited and rewritten in place, so it is safe to run
 repeatedly.
 
