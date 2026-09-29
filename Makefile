@@ -58,6 +58,14 @@ test-apps:
 ## lint: every static-analysis gate — gofmt + shell (root) and Go/UI (src/)
 lint: fmt-check lint-shell lint-go lint-ui sec vuln docs-check
 
+# ── Release ──────────────────────────────────────────────────────────────────
+
+## release: open the pull request that releases VERSION=X.Y.Z (RELEASING.md)
+.PHONY: release
+release:
+	@[ -n "$(VERSION)" ] || { echo "usage: make release VERSION=X.Y.Z [NEXT=X.Y.Z-dev]"; exit 2; }
+	@sh scripts/release.sh "$(VERSION)" $(NEXT)
+
 # ── Lifecycle ────────────────────────────────────────────────────────────────
 
 init:
@@ -109,6 +117,9 @@ help:
 	@echo "    make fuzz                short fuzz run over every parser"
 	@echo "    make lint                every static-analysis gate"
 	@echo "    make fmt                 gofmt the tree"
+	@echo ""
+	@echo "  Release (maintainer — RELEASING.md):"
+	@echo "    make release VERSION=X.Y.Z  Open the release pull request (NEXT=X.Y.Z-dev to override)"
 	@echo ""
 	@echo "  CLI (labctl):"
 	@echo "    make cli-build           Build for the host platform"

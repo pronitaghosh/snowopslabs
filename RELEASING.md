@@ -46,24 +46,14 @@ first 1.0 release.
 
 ## TL;DR — cut and publish a release
 
-Pushing a signed `vX.Y.Z` tag is all it takes: the
-[`Release` workflow](.github/workflows/release.yaml) runs goreleaser, builds the
-four platform archives + `checksums.txt`, and opens a **draft** GitHub Release.
-You review the draft and click **Publish** — then users can download `labctl`
-directly instead of building from source.
+One command opens the release pull request; merging it tags the release and
+builds a **draft** GitHub Release; you review the draft and publish it.
 
 ```bash
-# 1. (optional but recommended) dry-run the artifacts locally — publishes nothing
-cd src && goreleaser release --snapshot --clean --skip=publish && ls dist/ && cd ..
-
-# 2. set LAB_VERSION, tag that commit (signed) and push — this triggers the Release workflow
-echo 1.0.0 > LAB_VERSION && git commit -am "release: v1.0.0"
-git tag -s v1.0.0 -m "v1.0.0"
-git push origin main v1.0.0
-
-# 3. review the draft Release on GitHub, then Publish it (via the web UI or gh):
-gh release view v1.0.0 --web        # inspect notes/artifacts/checksums
-gh release edit v1.0.0 --draft=false  # publish once it looks right
+make release VERSION=1.6.0        # opens the release pull request
+# CI green → merge it with "Create a merge commit" or "Rebase and merge", never squash
+gh release view v1.6.0 --web      # inspect the draft: notes, archives, checksums
+gh release edit v1.6.0 --draft=false   # publish; stable moves to v1.6.0
 ```
 
 After publishing, the archives appear on the
@@ -72,15 +62,35 @@ moves to the tag, and the [README install steps](README.md#install) give
 learners the new release.
 The step-by-step version follows.
 
+## How `LAB_VERSION` moves
+
+`main` always carries a development version (`X.Y.Z-dev`); CI fails any change
+that leaves it on anything else. `make release VERSION=X.Y.Z` (it runs
+[`scripts/release.sh`](scripts/release.sh)) opens a pull request from
+`release/vX.Y.Z` with two commits off `main`:
+
+1. `release: vX.Y.Z` — sets `LAB_VERSION` to `X.Y.Z`. This is the commit that
+   gets tagged.
+2. `chore: start X.<Y+1>.0-dev` — moves `main` on to the next development
+   version. Pass `NEXT=X.Y.Z-dev` to choose another.
+
+When the pull request merges, the
+[`Tag release` workflow](.github/workflows/tag-release.yaml) finds the commit
+whose `LAB_VERSION` is a release that has no tag yet
+([`scripts/release-tag.sh`](scripts/release-tag.sh)), tags it `vX.Y.Z`, and
+calls the [`Release` workflow](.github/workflows/release.yaml) with that tag. A
+squash merge removes the release commit, so the workflow fails and says to run
+`make release` again.
+
 ## Release steps (maintainer)
 
-1. Before merging the release branch, accept it on a live lab: the
+1. Before merging the work for a release, accept it on a live lab: the
    [release acceptance](docs/release-acceptance.md) journey
    (`scripts/release-acceptance.sh`) plus a walk of the branch's own changes,
    or the `release-acceptance` skill, which runs both. Then ensure `main` is
    green (the full CI suite, including the `release-config` job that runs
    `goreleaser check` and a snapshot build).
-2. Dry-run locally to sanity-check the artifacts (nothing is published):
+2. Optionally dry-run the artifacts locally (nothing is published):
 
    ```bash
    cd src    # goreleaser runs where go.mod and .goreleaser.yaml live
@@ -88,26 +98,22 @@ The step-by-step version follows.
    ls dist/    # four .tar.gz archives + checksums.txt
    ```
 
-3. Set `LAB_VERSION` to the release (`X.Y.Z`, no `v`), commit it, and tag that
-   commit — **signed** (the maintainer holds the signing key):
+3. From a clean checkout, open the release pull request (needs `gh` signed in):
 
    ```bash
-   echo X.Y.Z > LAB_VERSION && git commit -am "release: vX.Y.Z"
-   git tag -s vX.Y.Z -m "vX.Y.Z"
-   git push origin main vX.Y.Z
+   make release VERSION=X.Y.Z
    ```
 
-4. The [`Release` workflow](.github/workflows/release.yaml) checks that
-   `LAB_VERSION` matches the tag, runs goreleaser, builds the four targets, and
-   opens a GitHub Release **as a draft**.
+4. When CI is green, merge it with **Create a merge commit** or **Rebase and
+   merge**, never squash. The `Tag release` workflow tags the release commit
+   and the `Release` workflow checks that `LAB_VERSION` matches the tag, runs
+   goreleaser, builds the four targets, and opens a GitHub Release **as a
+   draft**.
 5. Review the draft (notes, artifacts, checksums), then publish it. The
    [`Stable` workflow](.github/workflows/stable.yaml) then fast-forwards the
    `stable` branch to the tag, which is what learners clone and merge. A
    pre-release does not move `stable`.
-6. Set `LAB_VERSION` on `main` to the next development version
-   (`X.Y.(Z+1)-dev`) and commit it, so a clone of `main` is recognised as
-   development content.
-7. Announce; update docs if needed.
+6. Announce; update docs if needed.
 
 ## Verifying a download
 
@@ -129,8 +135,11 @@ Deferred until after the first feedback round — tracked in the W8 tasks:
 
 ## Hotfixes
 
-Patch releases branch from the release tag, cherry-pick the fix, and follow the
-same signed-release flow. A patch of the latest release descends from `stable`,
+Patch releases branch from the release tag, cherry-pick the fix, set
+`LAB_VERSION` to the patch version, commit, and push an annotated `vX.Y.Z` tag
+on that commit; the `Release` workflow runs on the pushed tag. `make release`
+is not used, because the patch does not go through `main`; cherry-pick the fix
+onto `main` separately. A patch of the latest release descends from `stable`,
 so the `Stable` workflow fast-forwards it. A patch of an older line does not; the
 workflow fails and `stable` stays on the newer release, which is what learners
 should have.

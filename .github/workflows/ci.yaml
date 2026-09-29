@@ -280,6 +280,17 @@ jobs:
           cache: npm
           cache-dependency-path: src/ui/package-lock.json
 
+      # main is development content: a release version lives only in the
+      # release commit `make release` puts inside its pull request, whose last
+      # commit moves LAB_VERSION on to the next -dev.
+      - name: LAB_VERSION is a -dev version
+        run: |
+          v="$(tr -d '[:space:]' < LAB_VERSION)"
+          if ! printf '%s\n' "$v" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+-dev$'; then
+            echo "LAB_VERSION is '$v'; main must carry X.Y.Z-dev. Release with 'make release VERSION=X.Y.Z' (RELEASING.md)." >&2
+            exit 1
+          fi
+
       # Validate .goreleaser.yaml and prove the full release build path (UI
       # build + embed + cross-compile) works, without publishing anything, so a
       # broken release config fails a PR rather than a tag. The config lives in

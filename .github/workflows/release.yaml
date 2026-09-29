@@ -1,21 +1,30 @@
-# Release — cut cross-platform labctl binaries on a version tag.
+# Release — cut cross-platform labctl binaries for a version tag.
 #
-# Triggered by pushing a semver tag (vX.Y.Z). goreleaser builds the four
-# supported targets (darwin/linux × amd64/arm64), archives them with a
-# checksums file, and opens a GitHub Release as a DRAFT for the maintainer to
-# review and publish. See RELEASING.md and .goreleaser.yaml.
+# Runs when a vX.Y.Z tag is pushed, and when the Tag release workflow calls it
+# with the tag it created (a workflow's own tag push starts no workflow).
+# goreleaser builds the four supported targets (darwin/linux × amd64/arm64),
+# archives them with a checksums file, and opens a GitHub Release as a DRAFT
+# for the maintainer to review and publish. See RELEASING.md and
+# .goreleaser.yaml.
 name: Release
 
 on:
   push:
     tags:
       - 'v*'
+  workflow_call:
+    inputs:
+      tag:
+        description: the vX.Y.Z tag to release
+        required: true
+        type: string
 
 permissions:
   contents: write # create the GitHub Release and upload artifacts
 
 env:
   GO_VERSION: '1.26'
+  TAG: ${{ inputs.tag || github.ref_name }}
   NODE_VERSION: '22'
 
 jobs:
@@ -25,16 +34,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: refs/tags/${{ env.TAG }}
           fetch-depth: 0 # goreleaser needs full history + tags for the changelog
 
       # A clone reads its release from LAB_VERSION, and install.sh installs the
       # labctl of that version, so the tag and the file must agree.
       - name: LAB_VERSION matches the tag
         run: |
-          want="${GITHUB_REF_NAME#v}"
+          want="${TAG#v}"
           got="$(tr -d '[:space:]' < LAB_VERSION)"
           if [ "$got" != "$want" ]; then
-            echo "LAB_VERSION is '$got' but the tag is $GITHUB_REF_NAME; set LAB_VERSION to $want, commit, and tag that commit." >&2
+            echo "LAB_VERSION is '$got' but the tag is $TAG; set LAB_VERSION to $want, commit, and tag that commit." >&2
             exit 1
           fi
 
@@ -60,3 +70,4 @@ jobs:
           workdir: src
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GORELEASER_CURRENT_TAG: ${{ env.TAG }}
