@@ -70,12 +70,27 @@ teardown() {
   stub_teardown
 }
 
+# base_path links the base system's commands into $STUB_DIR/base, leaving out
+# the tools setup-tools manages. A machine that has them installed in /usr/bin,
+# as CI runners do, would otherwise make a missing tool look installed.
+base_path() {
+  local dir="$STUB_DIR/base" f name
+  [ -d "$dir" ] && return 0
+  mkdir -p "$dir"
+  for f in /usr/bin/* /bin/* /usr/sbin/* /sbin/*; do
+    name="${f##*/}"
+    case "$name" in kubectl | helm | k3d | kind | brew) continue ;; esac
+    [ -e "$dir/$name" ] || ln -s "$f" "$dir/$name"
+  done
+}
+
 # setup_tools runs one function from setup-tools.sh with a given OS.
 setup_tools() {
   local os="$1"
   shift
   # Only the stubs and the base system: no real kubectl/helm/brew leaks in.
-  PATH="$STUB_BIN:/usr/bin:/bin:/usr/sbin:/sbin"
+  base_path
+  PATH="$STUB_BIN:$STUB_DIR/base"
   cat >"$STUB_BIN/uname" <<EOF
 #!/usr/bin/env bash
 case "\$1" in -m) echo arm64 ;; *) echo $os ;; esac
