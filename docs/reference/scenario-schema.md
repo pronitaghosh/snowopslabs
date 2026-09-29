@@ -428,6 +428,13 @@ script, check script and fault script run by the engine is given:
 | `PROJECT_ROOT` | `/home/me/snowopslabs` (the clone) |
 | `LAB_STATE_DIR` | `/home/me/.snowops/state/snowops` |
 
+Check scripts also get the lab's ingress: `DOMAIN_SUFFIX`, `INGRESS_URL_SUFFIX`,
+`HTTP_PORT`, `HTTPS_PORT`, and `PROMETHEUS_URL`, `GRAFANA_URL` and
+`ALERTMANAGER_URL`. curl and browsers resolve a `*.localhost` host to this
+machine themselves; other tools (openssl, dig, a language runtime) ask the
+system resolver, which often cannot. Such a script connects to `127.0.0.1` and
+names the host separately, as `openssl s_client -servername` does.
+
 A script that prints a command for the learner names repo files through
 `$PROJECT_ROOT`, and one that keeps files for the running lab puts them under
 `$LAB_STATE_DIR`. By hand neither is set, so fall back to the script's own

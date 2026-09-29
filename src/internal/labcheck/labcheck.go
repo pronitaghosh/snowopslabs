@@ -55,6 +55,7 @@ func ScriptEnv(cfg *config.Config, w workload.Workload) []string {
 		"DOMAIN_SUFFIX=" + cfg.DomainSuffix,
 		"INGRESS_URL_SUFFIX=" + cfg.IngressURLSuffix(),
 		"HTTP_PORT=" + cfg.HTTPPort,
+		"HTTPS_PORT=" + cfg.HTTPSPort,
 		"MONITORING_NAMESPACE=" + cfg.MonitoringNamespace,
 		"PROJECT_ROOT=" + cfg.ProjectRoot,
 		"LAB_STATE_DIR=" + cfg.StateDir,

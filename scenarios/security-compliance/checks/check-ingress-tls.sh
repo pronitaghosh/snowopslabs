@@ -15,6 +15,13 @@ NS="${WORKLOAD_NAMESPACE}"
 INGRESS="${WORKLOAD_NAME}"
 HOST="${WORKLOAD_NAME}.${DOMAIN_SUFFIX:-${CLUSTER_NAME:-snowops}.localhost}"
 SECRET="${WORKLOAD_NAME}-tls-secret"
+# A *.localhost name is always this machine, but openssl asks the system
+# resolver, which often cannot resolve one, so it dials loopback and sends the
+# name as SNI. HTTPS_PORT is the port the lab's ingress actually bound.
+case "$HOST" in
+  *.localhost) CONNECT="127.0.0.1:${HTTPS_PORT:-443}" ;;
+  *) CONNECT="${HOST}:${HTTPS_PORT:-443}" ;;
+esac
 
 if ! kubectl -n "$NS" get ingress "$INGRESS" >/dev/null 2>&1; then
   echo "FAIL: ingress/$INGRESS not found in $NS." >&2
@@ -35,20 +42,24 @@ if [ "$tls_secret" != "$SECRET" ]; then
 fi
 
 # What is actually presented on the wire for this SNI name?
-served=$(echo | openssl s_client -connect "${HOST}:443" -servername "$HOST" 2>/dev/null |
+served=$(echo | openssl s_client -connect "$CONNECT" -servername "$HOST" 2>/dev/null |
   openssl x509 -noout -issuer -subject 2>/dev/null || echo "")
 
 if [ -z "$served" ]; then
-  echo "FAIL: nothing completed a TLS handshake at ${HOST}:443." >&2
-  echo "      Check the ingress controller is listening on 443 and that $HOST resolves" >&2
-  echo "      (sudo labctl hosts add), then retry." >&2
+  echo "FAIL: nothing completed a TLS handshake for $HOST at $CONNECT." >&2
+  echo "      Check the ingress controller is running and listening on its HTTPS port:" >&2
+  echo "        kubectl get pods -A -l app.kubernetes.io/name=traefik" >&2
   exit 1
 fi
 
-case "$served" in
-  *"issuer=CN=lab-ca"*) ;;
+# OpenSSL prints "issuer=CN = lab-ca" and LibreSSL "issuer= /CN=lab-ca", so the
+# issuer is compared with its spaces and slashes removed.
+issuer=$(printf '%s\n' "$served" | sed -n 's/^issuer=//p' | tr -d ' /')
+
+case "$issuer" in
+  "CN=lab-ca") ;;
   *)
-    echo "FAIL: ${HOST}:443 is served by a certificate the lab CA did not sign:" >&2
+    echo "FAIL: ${HOST} is served by a certificate the lab CA did not sign:" >&2
     echo "$served" | sed 's/^/        /' >&2
     echo "      'CN=TRAEFIK DEFAULT CERT' means the Ingress TLS block is not routing to" >&2
     echo "      $SECRET — check the host in spec.tls[].hosts matches $HOST exactly, and" >&2
@@ -57,5 +68,5 @@ case "$served" in
     ;;
 esac
 
-echo "${HOST}:443 is served by the lab-signed leaf:"
+echo "${HOST} is served by the lab-signed leaf:"
 echo "$served" | sed 's/^/  /'

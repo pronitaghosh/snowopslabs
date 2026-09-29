@@ -134,8 +134,8 @@ The block lists three sources, sorted:
 A host outside the domain suffix is never written. If the cluster cannot be
 read, the platform and app hostnames are still written and a warning says so.
 
-`labctl scenario up` and `labctl app deploy` list any Ingress hostname the
-managed block does not cover yet, so a new hostname is announced before a
+On such a lab, `labctl scenario up` and `labctl app deploy` list any Ingress
+hostname the managed block does not cover yet, so a new hostname is announced before a
 browser fails to resolve it. Re-run `hosts add` when they do.
 
 ## The cluster

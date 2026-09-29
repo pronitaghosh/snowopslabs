@@ -173,7 +173,7 @@ checks:
     script: checks/check-ingress-tls.sh
     timeoutSeconds: 60
     pending: true
-    remediation: "A Ready Certificate protects nothing until something serves it — this grades the TLS handshake itself, not the manifest. Point the Ingress at the Secret: kubectl -n {{.WorkloadNamespace}} patch ingress {{.WorkloadName}} --type=merge -p '{\"metadata\":{\"annotations\":{\"traefik.ingress.kubernetes.io/router.entrypoints\":\"web,websecure\"}},\"spec\":{\"tls\":[{\"hosts\":[\"{{.WorkloadName}}.{{.DomainSuffix}}\"],\"secretName\":\"{{.WorkloadName}}-tls-secret\"}]}}' — then check what is on the wire: echo | openssl s_client -connect {{.WorkloadName}}.{{.DomainSuffix}}:443 -servername {{.WorkloadName}}.{{.DomainSuffix}} 2>/dev/null | openssl x509 -noout -issuer -subject"
+    remediation: "A Ready Certificate protects nothing until something serves it — this grades the TLS handshake itself, not the manifest. Point the Ingress at the Secret: kubectl -n {{.WorkloadNamespace}} patch ingress {{.WorkloadName}} --type=merge -p '{\"metadata\":{\"annotations\":{\"traefik.ingress.kubernetes.io/router.entrypoints\":\"web,websecure\"}},\"spec\":{\"tls\":[{\"hosts\":[\"{{.WorkloadName}}.{{.DomainSuffix}}\"],\"secretName\":\"{{.WorkloadName}}-tls-secret\"}]}}' — then check what is on the wire: echo | openssl s_client -connect 127.0.0.1:443 -servername {{.WorkloadName}}.{{.DomainSuffix}} 2>/dev/null | openssl x509 -noout -issuer -subject"
 
 snippets:
   - label: "The four ClusterPolicies — shipped in Audit, promoted to Enforce by you"
@@ -239,8 +239,8 @@ explore:
       command: "kubectl -n {{.WorkloadNamespace}} get certificate,certificaterequest,secret {{.WorkloadName}}-tls-secret 2>/dev/null; kubectl -n {{.WorkloadNamespace}} describe certificate {{.WorkloadName}}-tls 2>/dev/null | tail -20"
     - label: "8. WIRE IT UP — a Ready certificate protects nothing until the Ingress serves it"
       command: "kubectl -n {{.WorkloadNamespace}} patch ingress {{.WorkloadName}} --type=merge -p '{\"metadata\":{\"annotations\":{\"traefik.ingress.kubernetes.io/router.entrypoints\":\"web,websecure\"}},\"spec\":{\"tls\":[{\"hosts\":[\"{{.WorkloadName}}.{{.DomainSuffix}}\"],\"secretName\":\"{{.WorkloadName}}-tls-secret\"}]}}'"
-    - label: "9. PROVE it on the wire — before this, 443 answers with CN=TRAEFIK DEFAULT CERT"
-      command: "echo | openssl s_client -connect {{.WorkloadName}}.{{.DomainSuffix}}:443 -servername {{.WorkloadName}}.{{.DomainSuffix}} 2>/dev/null | openssl x509 -noout -issuer -subject -dates"
+    - label: "9. PROVE it on the wire — before this, 443 answers with CN=TRAEFIK DEFAULT CERT (openssl dials this machine and names the host in -servername; if the lab's HTTPS port is not 443, use that port)"
+      command: "echo | openssl s_client -connect 127.0.0.1:443 -servername {{.WorkloadName}}.{{.DomainSuffix}} 2>/dev/null | openssl x509 -noout -issuer -subject -dates"
     - label: "10. Inspect the signed leaf — issuer, validity window and SANs"
       command: "kubectl -n {{.WorkloadNamespace}} get secret {{.WorkloadName}}-tls-secret -o jsonpath='{.data.tls\\.crt}' | base64 -d | openssl x509 -noout -subject -issuer -dates -ext subjectAltName"
     - label: "11. The isolation posture — default-deny plus its explicit allowances"

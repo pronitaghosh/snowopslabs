@@ -144,8 +144,11 @@ conflict before choosing refuse over warn.
 
 ## B5 — Activating from the UI does not report missing hostnames
 
-**Problem.** `labctl scenario up` and `labctl app deploy` print Ingress hostnames
-that `/etc/hosts` does not list yet (`warnMissingHosts`). Activating from the UI
+**Problem.** Only a lab on a `DOMAIN_SUFFIX` the user set is affected: the
+default `*.localhost` names resolve without hosts entries, and `labctl init`
+moves a lab on the old `*.k3d.local` default to them. On such a lab,
+`labctl scenario up` and `labctl app deploy` print Ingress hostnames that
+`/etc/hosts` does not list yet (`warnMissingHosts`). Activating from the UI
 prints nothing, so a learner there first learns of a new hostname when the
 browser fails to resolve it — env-promotion's `<app>-dev|staging|prod` hosts are
 the common case.

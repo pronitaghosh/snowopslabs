@@ -52,8 +52,5 @@ kubectl rollout status deployment/opencost -n "$NAMESPACE" --timeout=120s
 
 echo ""
 echo "OpenCost installed."
-echo "  UI (ingress): http://${INGRESS_HOST}"
-echo "    Add the DNS entry once with: sudo labctl hosts add   (edits /etc/hosts)"
-echo "  UI (port-forward fallback, if the hosts entry isn't added):"
-echo "    kubectl -n ${NAMESPACE} port-forward svc/opencost 9090 &   then open http://localhost:9090"
+echo "  UI: http://opencost.${INGRESS_URL_SUFFIX:-${DOMAIN_SUFFIX}}"
 echo "  NOTE: k3d has no real billing — OpenCost uses on-prem default pricing (~\$0.048/CPU-hr)."

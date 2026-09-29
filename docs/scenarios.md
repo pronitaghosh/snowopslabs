@@ -909,8 +909,7 @@ about sizing requests correctly.
 2. `labctl traffic start --profile steady --rps 25` — without load the peak is
    meaningless and the floor cannot bite
 3. Read the gap on `http://grafana.snowops.localhost/d/cost-right-sizing`, and the cost in
-   the OpenCost UI at `http://opencost.snowops.localhost` (or
-   `kubectl -n opencost port-forward svc/opencost 9090 &`)
+   the OpenCost UI at `http://opencost.snowops.localhost`
 4. Right-size above the observed peak and under the ceiling:
    `kubectl -n <workload-ns> set resources deployment <workload> --requests=cpu=<peak+headroom>,memory=<peak+headroom>`
 5. `labctl scenario verify cost-right-sizing` — all checks **pass**

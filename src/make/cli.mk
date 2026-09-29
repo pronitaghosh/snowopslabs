@@ -60,11 +60,17 @@ cli-build-all: ui-build
 	done
 	@echo "Cross-compiled binaries in dist/"
 
-## cli-install: build and copy labctl onto PATH
+## cli-install: build labctl and install it over the copy install.sh put on PATH
+# It goes where install.sh installs (SNOWOPS_BIN_DIR, default ~/.local/bin),
+# because labctl puts that directory first on PATH for the tools it runs.
 cli-install: cli-build
-	@dest="$${GOBIN:-$$(go env GOPATH)/bin}"; \
+	@dest="$${SNOWOPS_BIN_DIR:-$$HOME/.local/bin}"; \
 	  mkdir -p "$$dest" && cp $(CLI_BIN) "$$dest/labctl" && \
-	  echo "Installed $$dest/labctl"
+	  echo "Installed $$dest/labctl" && \
+	  found="$$(command -v labctl || true)"; \
+	  if [ "$$found" != "$$dest/labctl" ]; then \
+	    echo "Warning: 'labctl' on PATH is $${found:-missing}, not $$dest/labctl; put $$dest first on PATH."; \
+	  fi
 
 cli-clean:
 	@rm -f $(CLI_BIN) coverage.out coverage.html

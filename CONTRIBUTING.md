@@ -84,7 +84,7 @@ bin/labctl scenario up observability-sre
 Other targets:
 
 ```bash
-make cli-install   # build and copy labctl into $(go env GOPATH)/bin
+make cli-install   # build labctl and install it over the one install.sh put in ~/.local/bin
 make ui-dev        # serve src/ui/dist live without rebuilding Go (LABCTL_UI_DIR)
 make docs-check    # the docs agree with the code and the website's manifest
 make fmt           # gofmt the tree

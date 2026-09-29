@@ -71,10 +71,11 @@ func TestPrometheusAndAlertmanagerURL(t *testing.T) {
 func TestScriptEnv(t *testing.T) {
 	t.Setenv("PROMETHEUS_URL", "")
 	t.Setenv("ALERTMANAGER_URL", "")
-	cfg := &config.Config{Profile: "k3d", DomainSuffix: "k3d.local", HTTPPort: "8080"}
+	cfg := &config.Config{Profile: "k3d", DomainSuffix: "k3d.local", HTTPPort: "8080", HTTPSPort: "8443"}
 	env := strings.Join(ScriptEnv(cfg, workload.Workload{Name: "go-api"}), "\n")
 	for _, want := range []string{
 		"INGRESS_URL_SUFFIX=k3d.local:8080",
+		"HTTPS_PORT=8443",
 		"GRAFANA_URL=http://grafana.k3d.local:8080",
 		"PROMETHEUS_URL=http://prometheus.k3d.local:8080",
 		"WORKLOAD_NAME=go-api",
