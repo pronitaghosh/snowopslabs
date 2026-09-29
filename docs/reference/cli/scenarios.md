@@ -37,7 +37,7 @@ scenario is not active). A path outside the scenario's directory is refused.
 
 | Flag | Default | Meaning |
 |---|---|---|
-| `--deploy-prereqs` | off | build and deploy prerequisite apps that are not running yet |
+| `--deploy-prereqs` | off | install prerequisite platform components and build and deploy prerequisite apps that are not running yet. Without it, a missing prerequisite stops `scenario up` with the command that installs it. |
 | `--force` | off | reinstall even when the scenario is already active |
 | `--set key=value` | — | override a scenario parameter; repeatable |
 
@@ -47,6 +47,34 @@ labctl scenario up autoscaling-under-load --set threshold=15 --set maxReplicas=4
 
 Parameters a scenario accepts are declared in its `parameters` block — see the
 [schema](../scenario-schema.md#parameters).
+
+## Running several at once
+
+Any number of scenarios can be active together, as long as the lab has room.
+Before `scenario up` installs anything it checks the Docker engine's memory
+against the baseline, everything already active and what the new scenario
+adds; a Helm release or platform component that several scenarios share is
+counted once. When there is not enough room it stops without changing the
+cluster and prints:
+
+- which active scenarios to bring down (`labctl scenario down <name>`) to make
+  room, largest saving first, when that is enough; and
+- how big to make Docker instead, with the resize command for colima, Docker
+  Desktop, WSL or native Linux.
+
+A scenario that needs more agent nodes than the cluster has gets them added
+before it starts (k3d), and `scenario down` removes them again once no active
+scenario needs them. An added node that holds a local volume stays, since its
+data would go with it. A scenario marked `exclusive` runs alone. Two active
+scenarios bound to the same app, or fewer CPUs than a scenario asks for, only
+print a warning. The same check runs for `labctl incident inject` and from the
+web UI. The fields scenarios use are in the
+[scenario schema](../scenario-schema.md#requirements).
+
+REST: `GET /api/v2/capacity` returns the Docker engine's CPUs and memory, the
+memory in use and the share the check lets the lab plan to use, all in MiB; the
+dashboard's Docker card shows it. It answers `404` on the incluster runtime and
+`503` when Docker cannot be reached.
 
 ## Which application it runs against
 

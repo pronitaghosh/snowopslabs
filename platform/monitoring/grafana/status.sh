@@ -25,7 +25,7 @@ kubectl get ingress -n $NAMESPACE -l app.kubernetes.io/name=grafana
 
 echo ""
 echo "Grafana Access:"
-echo "  - External: http://grafana.${DOMAIN_SUFFIX:-k3d.local}"
+echo "  - External: http://grafana.${INGRESS_URL_SUFFIX:-${DOMAIN_SUFFIX:-${CLUSTER_NAME:-snowops}.localhost}}"
 echo "  - Internal: http://grafana.$NAMESPACE.svc.cluster.local:80"
 echo ""
 echo "ConfigMaps:"

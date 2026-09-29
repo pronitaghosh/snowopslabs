@@ -21,7 +21,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 WORKLOAD="${WORKLOAD_NAME}"
 METRIC="${WORKLOAD_METRIC:-http_server_request_duration_seconds}"
-PROM="${PROMETHEUS_URL:-http://prometheus.${DOMAIN_SUFFIX:-k3d.local}}"
+PROM="${PROMETHEUS_URL:-http://prometheus.${INGRESS_URL_SUFFIX:-${DOMAIN_SUFFIX:-${CLUSTER_NAME:-snowops}.localhost}}}"
 SLO="${AVAILABILITY_SLO:-0.99}"
 MIN_RPS="${UPGRADE_MIN_RPS:-0.5}"
 
@@ -85,7 +85,7 @@ RATIO="$(promq "sum(rate(${METRIC}_count{app=\"${WORKLOAD}\",http_response_statu
 if [ -z "$RATIO" ]; then
   echo "FAIL: Prometheus returned no availability figure for ${WORKLOAD}." >&2
   echo "  If Prometheus itself lost its volume to the roll, release the dead claims first:" >&2
-  echo "    bash scenarios/cluster-upgrade-drill/scripts/reclaim-stranded-pvcs.sh" >&2
+  echo "    bash ${PROJECT_ROOT:-.}/scenarios/cluster-upgrade-drill/scripts/reclaim-stranded-pvcs.sh" >&2
   exit 1
 fi
 

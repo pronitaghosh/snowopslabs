@@ -4,7 +4,7 @@
 
 Learning paths combine cluster setup, app deployment, scenarios and incidents
 into structured modules with machine-verifiable completion checks. Progress
-lives in `.labctl/learn/` and survives CLI restarts.
+lives in `~/.snowops/state/<cluster>/learn/` and survives CLI restarts.
 
 ```bash
 labctl learn list                                    # paths with your progress
@@ -39,7 +39,7 @@ labctl challenge history                        # past runs with MTTR, score, hi
 
 | Flag | Default | Meaning |
 |---|---|---|
-| `--deploy-prereqs` | off | build and deploy the app the challenge needs |
+| `--deploy-prereqs` | off | install the platform components and build and deploy the app the challenge needs |
 | `--force` | off | override an already-active challenge |
 
 **Score formula:** `100 − (hints × penalty) − time_over_par_penalty`, scaled by

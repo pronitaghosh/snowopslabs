@@ -22,8 +22,8 @@ are also enforced hermetically in CI (`test/shell/platform_uninstall.bats`,
 
 ## Preconditions
 
-- Docker/Colima running with ≥4 CPU / 8 GB (see the README; the full stack needs
-  it).
+- Docker/Colima with ≥2 CPU / 4 GB. `labctl init` starts a stopped colima at
+  that size and refuses a running engine that is smaller.
 - `bin/labctl` built (`make cli-build`), or use `make` targets directly.
 - `PROFILE=k3d` (the default).
 
@@ -229,13 +229,43 @@ restart policy never fires, and the node stays `NotReady` until someone
 restarts the container by hand. The second start works: by then the Node object
 carries the address the container actually has.
 
-`runtimes/k3d/up.sh` does this itself (`restart_dead_nodes`), so `labctl init` /
-`make init` is the recovery — it restarts exactly the node containers with no
-k3s process and waits for every node to report Ready. This runs *before* the
-reachability probe on purpose: a dead server node would otherwise read as an
-unreachable cluster and be deleted along with the whole lab.
+Restarting one node at a time is not enough. Docker brings every node back at
+once, so an agent can start while its server is still starting, and after the
+restart a node's container may hold a different address from the one its Node
+object records. k3s's network policy controller reads the recorded address
+before the kubelet can correct it, so that node shuts down on every restart.
 
-Detecting it by hand is the same test the script makes:
+`runtimes/k3d/up.sh` handles all of it, so `labctl init` / `make init` is the
+recovery:
+
+1. If the cluster is not healthy (API not answering, a node container with no
+   k3s, or a node not Ready), it restarts the cluster **in order** with
+   `k3d cluster stop` + `k3d cluster start`: servers first, then agents.
+2. While k3d starts it, the script compares each node container's IP with its
+   Node's recorded `InternalIP`, running `kubectl` inside the server so it needs
+   neither the load balancer nor the host kubeconfig. A stale record is
+   corrected in place (a status patch; same Node, same name, same pods). This
+   covers the server too: with a stale address the server's k3s shuts down
+   every few seconds, so its API answers only in brief windows, and the check
+   repeats until one pass finds every record right.
+3. It then requires every node to run k3s and be Ready. Just after node
+   containers (re)start it takes six samples in a row, 10 s apart, since a node
+   can die a minute in while its Node still reads Ready; a lab that has been up
+   for a while needs one look. A node that is still unhealthy has its address
+   checked again and is restarted, at most twice.
+4. It **never deletes the cluster**. If it still cannot be brought back it stops
+   and points at `labctl reset`, which rebuilds from scratch on purpose.
+
+`labctl init` then skips platform installs that are already deployed and waits
+for their pods to be Ready. Because a skipped install never picks up changed
+values, init's closing checks then ask Grafana to query Prometheus
+(`/api/datasources/uid/prometheus/health`) and re-apply Grafana when it cannot;
+if it still cannot, init stops with Grafana's reason instead of "Lab is up". Measured on colima (2 CPU / 4 GB, 3 nodes, with
+go-api and observability-sre active): three consecutive `colima stop` → `labctl
+init` cycles each recovered in about two minutes with the app, the scenario and
+every pod intact.
+
+Detecting a dead node by hand is the same test the script makes:
 
 ```sh
 docker top k3d-snowops-agent-0 | grep /bin/k3s || docker restart k3d-snowops-agent-0

@@ -95,3 +95,41 @@ func TestPersistentPreRunSkipsEnvironmentDependentCommands(t *testing.T) {
 		}
 	}
 }
+
+func TestWithUserBin(t *testing.T) {
+	tests := []struct{ path, want string }{
+		{"/usr/bin:/bin", "/h/.local/bin:/usr/bin:/bin"},
+		{"/h/.local/bin:/usr/bin", "/h/.local/bin:/usr/bin"},
+		{"/usr/bin:/h/.local/bin", "/usr/bin:/h/.local/bin"},
+		{"", "/h/.local/bin"},
+	}
+	for _, tt := range tests {
+		if got := withUserBin(tt.path, "/h/.local/bin"); got != tt.want {
+			t.Errorf("withUserBin(%q) = %q, want %q", tt.path, got, tt.want)
+		}
+	}
+}
+
+func TestVersionSkew(t *testing.T) {
+	tests := []struct {
+		name    string
+		binary  string
+		content string
+		warns   bool
+	}{
+		{name: "same release", binary: "1.5.0", content: "1.5.0", warns: false},
+		{name: "v prefix on one side", binary: "v1.5.0", content: "1.5.0", warns: false},
+		{name: "different releases", binary: "1.5.0", content: "1.4.0", warns: true},
+		{name: "a lab without lab_version", binary: "1.5.0", content: "", warns: false},
+		{name: "development content with a release binary", binary: "1.5.0", content: "1.6.0-dev", warns: true},
+		{name: "a development build", binary: "dev", content: "1.4.0", warns: false},
+		{name: "a build between releases", binary: "1.4.0-4-ge74f3d4-dirty", content: "1.4.0", warns: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := versionSkew(tt.binary, tt.content, "/lab"); (got != "") != tt.warns {
+				t.Errorf("versionSkew(%q, %q) = %q, want warning %v", tt.binary, tt.content, got, tt.warns)
+			}
+		})
+	}
+}

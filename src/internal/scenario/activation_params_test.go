@@ -11,7 +11,7 @@ import (
 )
 
 func TestActiveParamsRoundTrip(t *testing.T) {
-	e := &Engine{stateDir: t.TempDir()}
+	e := &Engine{StateRoot: t.TempDir()}
 	want := map[string]string{"MinReplicas": "2", "MaxTailAmplification": "6"}
 	if err := e.markActive("demo", want); err != nil {
 		t.Fatalf("markActive: %v", err)
@@ -34,8 +34,11 @@ func TestActiveParamsRoundTrip(t *testing.T) {
 // parameters.
 func TestActiveParamsReadsLegacyMarker(t *testing.T) {
 	dir := t.TempDir()
-	e := &Engine{stateDir: dir}
-	if err := os.WriteFile(filepath.Join(dir, "legacy.active"), []byte("active"), 0o644); err != nil {
+	e := &Engine{StateRoot: dir}
+	if err := os.MkdirAll(e.stateDir(), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(e.stateDir(), "legacy.active"), []byte("active"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if !e.isActive("legacy") {
@@ -50,7 +53,7 @@ func TestActiveParamsReadsLegacyMarker(t *testing.T) {
 // on re-activation, and exist (as the smallest range) when nothing is active.
 func TestSinceActivationWindowsTheRun(t *testing.T) {
 	dir := t.TempDir()
-	e := &Engine{stateDir: dir}
+	e := &Engine{StateRoot: dir}
 	s := &Scenario{Name: "demo"}
 	query := "max_over_time(x[{{.SinceActivation}}:1m])"
 
@@ -64,7 +67,7 @@ func TestSinceActivationWindowsTheRun(t *testing.T) {
 		t.Fatal(err)
 	}
 	activated := time.Now().Add(-(94*time.Minute + 30*time.Second))
-	if err := os.Chtimes(filepath.Join(dir, "demo.active"), activated, activated); err != nil {
+	if err := os.Chtimes(filepath.Join(e.stateDir(), "demo.active"), activated, activated); err != nil {
 		t.Fatal(err)
 	}
 	restore = e.withActivationParams(s)
@@ -86,7 +89,7 @@ func TestSinceActivationWindowsTheRun(t *testing.T) {
 }
 
 func TestActiveParamsMissingScenario(t *testing.T) {
-	e := &Engine{stateDir: t.TempDir()}
+	e := &Engine{StateRoot: t.TempDir()}
 	if got := e.activeParams("never-activated"); got != nil {
 		t.Errorf("activeParams() = %v, want nil", got)
 	}
@@ -95,11 +98,11 @@ func TestActiveParamsMissingScenario(t *testing.T) {
 // A scenario with no parameters and no app gets the plain "active" marker.
 func TestMarkActiveWithoutParamsStaysPlain(t *testing.T) {
 	dir := t.TempDir()
-	e := &Engine{stateDir: dir}
+	e := &Engine{StateRoot: dir}
 	if err := e.markActive("plain", nil); err != nil {
 		t.Fatal(err)
 	}
-	data, err := os.ReadFile(filepath.Join(dir, "plain.active"))
+	data, err := os.ReadFile(filepath.Join(e.stateDir(), "plain.active"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -111,7 +114,7 @@ func TestMarkActiveWithoutParamsStaysPlain(t *testing.T) {
 // Down renders the same manifests as the install, so it must expand
 // {{.Param}} with the same values, or `kubectl delete` gets a broken manifest.
 func TestWithActivationParamsScopesAndRestores(t *testing.T) {
-	e := &Engine{stateDir: t.TempDir()}
+	e := &Engine{StateRoot: t.TempDir()}
 	s := &Scenario{
 		Name:       "demo",
 		Parameters: []Parameter{{Name: "MinReplicas", Default: "1", Type: "int"}},
@@ -141,7 +144,7 @@ func TestWithActivationParamsScopesAndRestores(t *testing.T) {
 // The parameter is unquoted so the CRD sees an integer, which makes the
 // manifest valid YAML only after substitution.
 func TestParamsResolveInsideAManifestBody(t *testing.T) {
-	e := &Engine{stateDir: t.TempDir()}
+	e := &Engine{StateRoot: t.TempDir()}
 	s := &Scenario{Name: "demo", Parameters: []Parameter{
 		{Name: "MinReplicas", Default: "1", Type: "int"},
 		{Name: "MaxReplicas", Default: "6", Type: "int"},

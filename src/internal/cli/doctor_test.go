@@ -5,10 +5,15 @@ package cli
 import (
 	"bytes"
 	"context"
+	"errors"
+	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
 
+	"github.com/sagar2395/snowopslabs/internal/capacity"
+	"github.com/sagar2395/snowopslabs/internal/config"
 	"github.com/sagar2395/snowopslabs/internal/toolchain"
 )
 
@@ -35,7 +40,7 @@ func fakeEnv(dockerInfo string) *toolchain.Fake {
 // These tests check doctor's output text as well as its exit status.
 
 func TestRunDoctor(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// A fake where every tool resolves and reports a current version, and the
 	// Docker VM is comfortably provisioned. The `docker info` rule is registered
@@ -50,7 +55,7 @@ func TestRunDoctor(t *testing.T) {
 		if err := runDoctor(ctx, &out, healthy()); err != nil {
 			t.Fatalf("runDoctor: %v\n%s", err, out.String())
 		}
-		if !strings.Contains(out.String(), "Everything SnowOps Labs needs") {
+		if !strings.Contains(out.String(), "Ready to run SnowOps Labs") {
 			t.Errorf("output should confirm success:\n%s", out.String())
 		}
 		if strings.Contains(out.String(), "Problems to fix") {
@@ -151,7 +156,7 @@ func TestRunDoctor(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected an error")
 		}
-		if !strings.Contains(err.Error(), "2 required") {
+		if !strings.Contains(err.Error(), "2 problem(s)") {
 			t.Errorf("error = %q, want it to count the problems", err)
 		}
 	})
@@ -173,114 +178,105 @@ func TestRunDoctor(t *testing.T) {
 		}
 	})
 
-	t.Run("warns (but does not fail) when the Docker VM is under-provisioned", func(t *testing.T) {
+	t.Run("an under-provisioned Docker VM is a blocking problem", func(t *testing.T) {
 		var out bytes.Buffer
-		// 2 CPU / 2 GiB — the classic default Docker Desktop / Colima VM.
-		if err := runDoctor(ctx, &out, fakeEnv("2 2147483648")); err != nil {
-			t.Fatalf("an under-provisioned VM is a warning, not a failure: %v\n%s", err, out.String())
+		// 2 CPU / 2 GiB — the default colima VM, which cannot hold the lab.
+		err := runDoctor(ctx, &out, fakeEnv("2 2147483648"))
+		if err == nil {
+			t.Fatalf("an undersized VM must fail doctor:\n%s", out.String())
 		}
 		text := out.String()
-		if strings.Contains(text, "Problems to fix") {
-			t.Errorf("resources are a note, not a blocking problem:\n%s", text)
-		}
-		// Name the shortfall and both fixes (README guidance).
-		for _, want := range []string{
-			"Notes:", "Docker has 2 CPU / 2 GiB", "needs at least 4 CPU / 8 GiB",
-			"colima start --cpu 4 --memory 8", "Docker Desktop",
-		} {
+		for _, want := range []string{"Problems to fix", "Docker has 2 CPU / 2 GB", "needs at least 2 CPU / 4 GB"} {
 			if !strings.Contains(text, want) {
 				t.Errorf("output should mention %q:\n%s", want, text)
 			}
 		}
-	})
-
-	t.Run("no resource warning when the Docker VM is sufficient", func(t *testing.T) {
-		var out bytes.Buffer
-		if err := runDoctor(ctx, &out, fakeEnv("4 8589934592")); err != nil { // exactly 4 CPU / 8 GiB
-			t.Fatalf("runDoctor: %v", err)
-		}
-		if strings.Contains(out.String(), "needs at least") {
-			t.Errorf("a VM meeting the minimum should not warn:\n%s", out.String())
+		if strings.Contains(text, "Ready to run") {
+			t.Errorf("doctor must not claim readiness after a problem:\n%s", text)
 		}
 	})
 
-	t.Run("no resource warning when the Docker daemon is unreachable", func(t *testing.T) {
-		f := healthy()
-		// `docker info` fails (daemon down) — a different problem, silently skipped.
-		f2 := toolchain.NewFake()
-		f2.Available = f.Available
-		f2.WhenArgsContain("info", "", 1)
-		f2.WhenArgsContain("/bin/bash", "GNU bash, version 5.2.21(1)-release\n", 0)
-		f2.WhenArgsContain("kubectl", `{"clientVersion":{"gitVersion":"v1.31.0"}}`+"\n", 0)
-		f2.WhenArgsContain("helm", "v3.16.0\n", 0)
-		f2.WhenArgsContain("docker", "27.0.0\n", 0)
-		f2.WhenArgsContain("k3d", "k3d version v5.8.3\n", 0)
-		f2.WhenArgsContain("kind", "kind v0.27.0\n", 0)
-
+	t.Run("a VM at the minimum reports its size and passes", func(t *testing.T) {
 		var out bytes.Buffer
-		if err := runDoctor(ctx, &out, f2); err != nil {
-			t.Fatalf("runDoctor: %v", err)
+		if err := runDoctor(ctx, &out, fakeEnv("2 4294967296")); err != nil {
+			t.Fatalf("runDoctor: %v\n%s", err, out.String())
 		}
-		if strings.Contains(out.String(), "needs at least") {
-			t.Errorf("a stopped daemon should not produce a resource warning:\n%s", out.String())
+		if !strings.Contains(out.String(), "2 CPU / 4 GB — meets the minimum") {
+			t.Errorf("the Docker line should show the size:\n%s", out.String())
 		}
 	})
 }
 
-func TestDockerResourceWarning(t *testing.T) {
-	ctx := context.Background()
-
-	newFake := func(dockerInfo string, exit int) *toolchain.Fake {
+func TestDockerCapacity(t *testing.T) {
+	fake := func(info string, exit int, dockerContext string) *toolchain.Fake {
 		f := toolchain.NewFake()
-		f.Available = map[string]string{"docker": "/usr/bin/docker"}
-		f.WhenArgsContain("info", dockerInfo, exit)
+		f.Available = map[string]string{"docker": "/usr/bin/docker", "colima": "/opt/homebrew/bin/colima"}
+		f.WhenArgsContain("context show", dockerContext+"\n", 0)
+		f.WhenArgsContain("info", info, exit)
 		return f
 	}
 
-	t.Run("warns below the CPU minimum", func(t *testing.T) {
-		if got := dockerResourceWarning(ctx, newFake("2 17179869184", 0)); !strings.Contains(got, "2 CPU") {
-			t.Errorf("expected a CPU warning, got %q", got)
-		}
-	})
-
-	t.Run("warns below the memory minimum", func(t *testing.T) {
-		got := dockerResourceWarning(ctx, newFake("8 2147483648", 0))
-		if !strings.Contains(got, "8 CPU / 2 GiB") {
-			t.Errorf("expected a memory warning naming the detected values, got %q", got)
-		}
-	})
-
-	t.Run("silent exactly at the minimum", func(t *testing.T) {
-		if got := dockerResourceWarning(ctx, newFake("4 8589934592", 0)); got != "" {
-			t.Errorf("4 CPU / 8 GiB meets the minimum; want no warning, got %q", got)
-		}
-	})
-
-	t.Run("silent when docker is not installed", func(t *testing.T) {
-		f := toolchain.NewFake()
-		f.Available = map[string]string{} // docker absent -> LookPath fails
-		if got := dockerResourceWarning(ctx, f); got != "" {
-			t.Errorf("missing docker is reported elsewhere; want no warning, got %q", got)
-		}
-	})
-
-	t.Run("silent when the daemon is unreachable", func(t *testing.T) {
-		if got := dockerResourceWarning(ctx, newFake("", 1)); got != "" {
-			t.Errorf("a stopped daemon should be skipped, got %q", got)
-		}
-	})
-
-	t.Run("silent on unparseable output", func(t *testing.T) {
-		for _, bad := range []string{"lots of ram", "8", "0 0", "-1 8589934592"} {
-			if got := dockerResourceWarning(ctx, newFake(bad, 0)); got != "" {
-				t.Errorf("output %q is unparseable; want no warning, got %q", bad, got)
+	tests := []struct {
+		name        string
+		fake        *toolchain.Fake
+		goos        string
+		wsl         bool
+		wantLine    string
+		wantProblem string
+		wantNote    string
+	}{
+		{
+			name: "enough resources", fake: fake("4 8307675136", 0, "colima"), goos: "darwin",
+			wantLine: "4 CPU / 7.7 GB — meets the minimum",
+		},
+		{
+			name: "undersized colima prints the colima resize", fake: fake("2 2054160384", 0, "colima"), goos: "darwin",
+			wantLine: "2 CPU / 1.9 GB", wantProblem: "colima stop && colima start --cpu 2 --memory 4",
+		},
+		{
+			name: "undersized WSL points at .wslconfig", fake: fake("2 2054160384", 0, "default"), goos: "linux", wsl: true,
+			wantProblem: "wsl --shutdown",
+		},
+		{
+			name: "stopped colima is a note: init starts it", fake: fake("", 1, "colima"), goos: "darwin",
+			wantLine: "not running", wantNote: "labctl init' starts it",
+		},
+		{
+			name: "stopped native daemon is a problem", fake: fake("", 1, "default"), goos: "linux",
+			wantLine: "not running", wantProblem: "sudo systemctl start docker",
+		},
+		{
+			name: "unparseable output is a note", fake: fake("lots of ram", 0, "default"), goos: "linux",
+			wantLine: "unknown", wantNote: "Could not read",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := dockerCapacity(t.Context(), tt.fake, capacity.Platform{GOOS: tt.goos, WSL: tt.wsl})
+			line, problem, note := got.line, got.problem, got.note
+			check := func(field, got, want string) {
+				if want == "" && got != "" {
+					t.Errorf("%s = %q, want empty", field, got)
+				}
+				if want != "" && !strings.Contains(got, want) {
+					t.Errorf("%s = %q, want it to contain %q", field, got, want)
+				}
 			}
-		}
-	})
+			if tt.wantLine != "" {
+				check("line", line, tt.wantLine)
+			}
+			check("problem", problem, tt.wantProblem)
+			check("note", note, tt.wantNote)
+		})
+	}
 
-	t.Run("nil context does not panic", func(t *testing.T) {
-		//nolint:staticcheck // deliberately passing nil to prove it is handled
-		_ = dockerResourceWarning(nil, newFake("16 17179869184", 0))
+	t.Run("missing docker is left to the tool checks", func(t *testing.T) {
+		f := toolchain.NewFake()
+		f.Available = map[string]string{}
+		f.LookPathErr = errors.New("not found")
+		if got := dockerCapacity(t.Context(), f, capacity.Platform{GOOS: "linux"}); got != (dockerReport{}) {
+			t.Errorf("want nothing, got %+v", got)
+		}
 	})
 }
 
@@ -301,6 +297,38 @@ func TestStatusLabel(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := statusLabel(tt.result); got != tt.want {
 				t.Errorf("statusLabel() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestLabDomain(t *testing.T) {
+	lab := t.TempDir()
+	for _, d := range []string{"scenarios", "runtimes/k3d"} {
+		if err := os.MkdirAll(filepath.Join(lab, d), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Setenv("SNOWOPS_HOME", t.TempDir())
+	t.Setenv("DOMAIN_SUFFIX", "")
+	t.Setenv("CLUSTER_NAME", "")
+	tests := []struct {
+		name       string
+		env        string
+		labErr     error
+		wantSuffix string
+		wantLocal  bool
+	}{
+		{name: "the default suffix resolves locally", wantSuffix: "snowops.localhost", wantLocal: true},
+		{name: "a .local suffix needs hosts entries", env: "k3d.local", wantSuffix: "k3d.local"},
+		{name: "no lab falls back to the default", labErr: config.ErrNoLab, wantSuffix: "snowops.localhost", wantLocal: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("DOMAIN_SUFFIX", tt.env)
+			suffix, local := labDomain(lab, tt.labErr)
+			if suffix != tt.wantSuffix || local != tt.wantLocal {
+				t.Errorf("labDomain = %q, %v; want %q, %v", suffix, local, tt.wantSuffix, tt.wantLocal)
 			}
 		})
 	}

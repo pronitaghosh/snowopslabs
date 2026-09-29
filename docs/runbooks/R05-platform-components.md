@@ -81,7 +81,7 @@ version.
 
 ## Preconditions
 
-- Docker/Colima running with ≥4 CPU / 8 GB.
+- Docker/Colima running with ≥2 CPU / 4 GB (`labctl init` starts colima at that size).
 - `bin/labctl` built (`make cli-build`), or `make` targets available.
 - For §2–4, a cluster up: `make init` or `labctl lab up`.
 

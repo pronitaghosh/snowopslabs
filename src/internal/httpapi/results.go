@@ -14,7 +14,7 @@ import (
 )
 
 func resultsStore(s *Server) *results.Store {
-	return results.NewStore(filepath.Join(s.cfg.ProjectRoot, ".labctl", "history"))
+	return results.NewStore(filepath.Join(s.cfg.StateDir, "history"))
 }
 
 // recordScenarioVerify appends a scenario verification record, with the

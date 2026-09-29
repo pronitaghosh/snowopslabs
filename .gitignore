@@ -52,11 +52,10 @@ Thumbs.db
 .labctl/
 .snowops/
 
-## Local session scaffolding — planning state, session instructions, scratch
-## logs. The authoring skills under .claude/skills/ are deliberately NOT here:
-## they route contributors to the public docs and are part of the open core.
+## Local session scaffolding — planning state and scratch logs. CLAUDE.md and
+## the authoring skills under .claude/skills/ are committed: they route agents
+## and contributors to the public docs.
 .ai/
-CLAUDE.md
 AGENTS.md
 
 ## Internal migration planning — local only, never committed

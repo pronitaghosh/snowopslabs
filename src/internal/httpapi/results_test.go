@@ -18,7 +18,7 @@ func newResultsServer(t *testing.T) (*Server, *results.Store) {
 	t.Helper()
 	root := t.TempDir()
 	s := &Server{
-		cfg: &config.Config{ProjectRoot: root},
+		cfg: &config.Config{ProjectRoot: root, StateDir: filepath.Join(root, ".labctl")},
 	}
 	store := results.NewStore(filepath.Join(root, ".labctl", "history"))
 	return s, store
@@ -116,7 +116,7 @@ func TestHandleProgress_WithModuleRecords(t *testing.T) {
 func TestHandleResults_StoreNotCreatedYet(t *testing.T) {
 	root := t.TempDir()
 	// Do NOT create .labctl/history — simulate a fresh install.
-	s := &Server{cfg: &config.Config{ProjectRoot: root}}
+	s := &Server{cfg: &config.Config{ProjectRoot: root, StateDir: filepath.Join(root, ".labctl")}}
 	req := httptest.NewRequest(http.MethodGet, "/api/results", nil)
 	w := httptest.NewRecorder()
 	s.handleResults(w, req)

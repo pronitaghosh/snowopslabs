@@ -4,15 +4,13 @@
 # inject, so the run history is the only evidence the module was actually done
 # — and resolvedBy distinguishes a real fix from the escape hatch.
 #
-# Read the MOST RECENT run for this fault, not "any run, ever". Scanning the
-# whole file made this module permanently green for anyone who had ever fixed
-# this incident — including on a lab where they had just injected it again and
-# not touched it. The last thing that happened to this fault has to be the
-# learner fixing it by hand.
+# Only the most recent run of this fault counts: an older fix must not pass a
+# lab where the fault was injected again and left alone. That last run has to
+# be the learner fixing it by hand.
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
-HISTORY="$ROOT/.labctl/history/results.jsonl"
+# labctl sets LAB_STATE_DIR; the fallback is its default location.
+HISTORY="${LAB_STATE_DIR:-${SNOWOPS_HOME:-$HOME/.snowops}/state/${CLUSTER_NAME:-snowops}}/history/results.jsonl"
 
 [ -f "$HISTORY" ] || exit 1
 

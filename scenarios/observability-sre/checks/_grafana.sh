@@ -8,8 +8,8 @@
 # common way this stack looks "empty" to a learner.
 
 MONITORING_NAMESPACE="${MONITORING_NAMESPACE:-monitoring}"
-DOMAIN_SUFFIX="${DOMAIN_SUFFIX:-k3d.local}"
-GRAFANA_URL="${GRAFANA_URL:-http://grafana.${DOMAIN_SUFFIX}}"
+DOMAIN_SUFFIX="${DOMAIN_SUFFIX:-${CLUSTER_NAME:-snowops}.localhost}"
+GRAFANA_URL="${GRAFANA_URL:-http://grafana.${INGRESS_URL_SUFFIX:-${DOMAIN_SUFFIX:-${CLUSTER_NAME:-snowops}.localhost}}}"
 
 # Read the admin password from the secret rather than assuming the default, so
 # the check keeps working on a lab whose Grafana was installed with its own.

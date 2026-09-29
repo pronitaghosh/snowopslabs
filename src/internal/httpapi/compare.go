@@ -11,7 +11,7 @@ import (
 )
 
 func compareStore(s *Server) *compare.Store {
-	return compare.NewStore(filepath.Join(s.cfg.ProjectRoot, ".labctl", "history"))
+	return compare.NewStore(filepath.Join(s.cfg.StateDir, "history"))
 }
 
 // comparisonView is one recorded comparison, shaped for the UI.

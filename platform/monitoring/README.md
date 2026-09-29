@@ -35,7 +35,7 @@ Includes:
 - **Node Exporter**: Hardware/OS metrics from each node
 - **Kube-State-Metrics**: Kubernetes object metrics (pods, deployments, etc.)
 - **Alertmanager**: Alert routing and aggregation (internal only)
-- **Traefik Ingress**: Exposes Prometheus at `prometheus.k3d.local`
+- **Traefik Ingress**: Exposes Prometheus at `prometheus.snowops.localhost`
 
 ### Grafana
 - **Datasource**: Auto-provisioned Prometheus datasource
@@ -43,7 +43,7 @@ Includes:
   - Cluster Metrics (CPU, memory, pod count)
   - Pod Resources (per-pod CPU/memory, network)
   - Application Requests (HTTP metrics from go-api)
-- **Traefik Ingress**: Exposes Grafana at `grafana.k3d.local`
+- **Traefik Ingress**: Exposes Grafana at `grafana.snowops.localhost`
 - **Admin Credentials**: `admin` / `admin` (changeable via `GRAFANA_ADMIN_PASSWORD` env var)
 
 ## Installation
@@ -89,19 +89,16 @@ kubectl get ingress -n monitoring
 Expected output:
 ```
 NAME         CLASS     HOSTS                         ADDRESS     PORTS   AGE
-prometheus   traefik   prometheus.k3d.local          172.x.x.x   80      2m
-grafana      traefik   grafana.k3d.local            172.x.x.x   80      1m
+prometheus   traefik   prometheus.snowops.localhost          172.x.x.x   80      2m
+grafana      traefik   grafana.snowops.localhost            172.x.x.x   80      1m
 ```
 
 ### 3. Access Prometheus UI
 
-**Option A: Via Traefik Ingress** (requires `/etc/hosts` entry)
+**Option A: Via Traefik Ingress** (`*.localhost` resolves to this machine)
 ```bash
-# Add to /etc/hosts or use DNS:
-echo "127.0.0.1 prometheus.k3d.local" | sudo tee -a /etc/hosts
-
 # Visit:
-http://prometheus.k3d.local
+http://prometheus.snowops.localhost
 ```
 
 **Option B: Via Port Forward**
@@ -132,11 +129,8 @@ You should see scrape jobs for:
 
 **Option A: Via Traefik Ingress**
 ```bash
-# Add to /etc/hosts:
-echo "127.0.0.1 grafana.k3d.local" | sudo tee -a /etc/hosts
-
 # Visit:
-http://grafana.k3d.local
+http://grafana.snowops.localhost
 ```
 
 **Option B: Via Port Forward**

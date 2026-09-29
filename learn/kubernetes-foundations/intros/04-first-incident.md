@@ -21,7 +21,7 @@ Inject the fault, diagnose it yourself, fix it, and confirm resolution.
 
 ```bash
 bin/labctl incident inject service-selector-broken
-curl http://go-api.k3d.local/health          # see what users see
+curl http://go-api.{{.IngressURLSuffix}}/health          # see what users see
 ```
 
 Then work it the way you would on call. Two questions carry this one: *is the

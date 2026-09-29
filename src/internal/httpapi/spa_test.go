@@ -19,7 +19,7 @@ func TestSPAHandler_FallsBackToIndexForClientRoutes(t *testing.T) {
 	const indexBody = "<!doctype html><title>shell</title>"
 	const assetBody = "console.log('app')"
 	s := &Server{
-		cfg: &config.Config{ProjectRoot: t.TempDir()},
+		cfg: &config.Config{ProjectRoot: t.TempDir(), StateDir: t.TempDir()},
 		uiFS: fstest.MapFS{
 			"index.html":    {Data: []byte(indexBody)},
 			"assets/app.js": {Data: []byte(assetBody)},

@@ -3,26 +3,19 @@
 package cli
 
 import (
-	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
-	"strconv"
-	"strings"
+	"os"
+	"runtime"
 	"text/tabwriter"
-	"time"
 
 	"github.com/spf13/cobra"
 
+	"github.com/sagar2395/snowopslabs/internal/capacity"
+	"github.com/sagar2395/snowopslabs/internal/config"
 	"github.com/sagar2395/snowopslabs/internal/toolchain"
-)
-
-// Minimum Docker resources, matching the README. The 3-node k3d cluster and
-// platform run out of memory or time out on a default 2 GB VM, often with an
-// API server "TLS handshake timeout".
-const (
-	minDockerCPU      = 4
-	minDockerMemBytes = 8 << 30 // 8 GiB
 )
 
 // doctorCmd checks the user's environment before a cluster build. Each
@@ -75,56 +68,106 @@ func runDoctor(ctx context.Context, out io.Writer, runner toolchain.Runner) erro
 	}
 	_ = w.Flush()
 
-	var problems, warnings []toolchain.CheckResult
-	for _, r := range results {
-		if r.Detail == "" {
-			continue
-		}
-		if r.OK() {
-			if r.Status != toolchain.CheckOK {
-				warnings = append(warnings, r)
-			}
-			continue
-		}
-		problems = append(problems, r)
+	problems, notes := toolFindings(results)
+	lab, labErr := config.FindLab(projectDir)
+	if labErr != nil {
+		problems = append(problems, labErr.Error())
+	} else {
+		fmt.Fprintf(out, "\nLab:      %s%s\n", lab, labVersionSuffix(config.LabVersion(lab)))
+	}
+	docker := dockerCapacity(ctx, runner, capacity.Platform{GOOS: runtime.GOOS, WSL: isWSL()})
+	if docker.line != "" {
+		fmt.Fprintf(out, "\nDocker:   %s\n", docker.line)
+	}
+	if docker.problem != "" {
+		problems = append(problems, docker.problem)
+	}
+	if docker.note != "" {
+		notes = append(notes, docker.note)
+	}
+	suffix, local := labDomain(lab, labErr)
+	if !local && !hostsBlockPresent() {
+		notes = append(notes, "Ingress hostnames (e.g. http://grafana."+suffix+") won't resolve until you\n"+
+			"    run 'labctl hosts add' (one-time, needs sudo). Not needed for the UI at :3939.")
 	}
 
-	dockerNote := dockerResourceWarning(ctx, runner)
-
-	if len(warnings) > 0 || dockerNote != "" {
-		fmt.Fprintln(out, "\nNotes:")
-		for _, r := range warnings {
-			fmt.Fprintf(out, "  - %s\n", r.Detail)
-		}
-		if dockerNote != "" {
-			fmt.Fprintf(out, "  - %s\n", dockerNote)
-		}
-	}
-
-	if len(problems) > 0 {
-		fmt.Fprintln(out, "\nProblems to fix:")
-		for _, r := range problems {
-			fmt.Fprintf(out, "  ✗ %s\n", r.Detail)
-		}
-		fmt.Fprintln(out)
-		return fmt.Errorf("%d required tool(s) missing or out of date", len(problems))
-	}
-
-	if !hostsBlockPresent() {
-		fmt.Fprintln(out, "\nNotes:")
-		fmt.Fprintln(out, "  - Ingress hostnames (e.g. http://grafana.k3d.local) won't resolve until you")
-		fmt.Fprintln(out, "    run 'labctl hosts add' (one-time, needs sudo). Not needed for the UI at :3939.")
-	}
-
+	printBullets(out, "Notes:", "-", notes)
 	if isWSL() {
-		fmt.Fprintln(out, "\nWSL notes:")
-		for _, n := range wslDoctorNotes() {
-			fmt.Fprintf(out, "  - %s\n", n)
+		dir := lab
+		if labErr != nil {
+			dir = workingDir()
 		}
+		printBullets(out, "WSL notes:", "-", wslDoctorNotes(dir, suffix, local))
+	}
+	if len(problems) > 0 {
+		printBullets(out, "Problems to fix:", "✗", problems)
+		fmt.Fprintln(out)
+		return fmt.Errorf("%d problem(s) to fix before SnowOps Labs can run", len(problems))
 	}
 
-	fmt.Fprintln(out, "\n✓ Everything SnowOps Labs needs is installed and current.")
+	if len(notes) > 0 {
+		fmt.Fprintln(out, "\n✓ Ready to run SnowOps Labs (see the notes above).")
+	} else {
+		fmt.Fprintln(out, "\n✓ Ready to run SnowOps Labs.")
+	}
 	return nil
+}
+
+// toolFindings splits the tool checks into blocking problems and notes about
+// optional tools.
+func toolFindings(results []toolchain.CheckResult) (problems, notes []string) {
+	problems, notes = []string{}, []string{}
+	for _, r := range results {
+		switch {
+		case r.Detail == "":
+		case !r.OK():
+			problems = append(problems, r.Detail)
+		case r.Status != toolchain.CheckOK:
+			notes = append(notes, r.Detail)
+		}
+	}
+	return problems, notes
+}
+
+// printBullets prints a titled list, or nothing when items is empty.
+func printBullets(out io.Writer, title, bullet string, items []string) {
+	if len(items) == 0 {
+		return
+	}
+	fmt.Fprintf(out, "\n%s\n", title)
+	for _, item := range items {
+		fmt.Fprintf(out, "  %s %s\n", bullet, item)
+	}
+}
+
+// labDomain is the domain suffix of the lab's hostnames and whether browsers
+// resolve it without hosts-file entries. Without a readable lab it reports the
+// default, which does.
+func labDomain(lab string, labErr error) (string, bool) {
+	if labErr == nil {
+		if labCfg, err := config.Load(lab); err == nil {
+			return labCfg.DomainSuffix, labCfg.ResolvesLocally()
+		}
+	}
+	return "snowops.localhost", true
+}
+
+// labVersionSuffix formats a lab's LAB_VERSION for the doctor report.
+func labVersionSuffix(version string) string {
+	if version == "" {
+		return ""
+	}
+	return " (" + version + ")"
+}
+
+// workingDir is the current directory, or "" when it cannot be read; the
+// caller then skips the notes that depend on it.
+func workingDir() string {
+	dir, err := os.Getwd()
+	if err != nil {
+		return ""
+	}
+	return dir
 }
 
 func statusLabel(r toolchain.CheckResult) string {
@@ -146,78 +189,41 @@ func statusLabel(r toolchain.CheckResult) string {
 	}
 }
 
-// dockerResourceWarning returns a warning when Docker has fewer CPUs or less
-// memory than the minimum, or "" when it has enough or the values cannot be
-// read (docker missing, daemon down, output unparseable). A missing docker is
-// already reported by the tool checks.
-func dockerResourceWarning(ctx context.Context, runner toolchain.Runner) string {
-	if ctx == nil {
-		ctx = context.Background()
-	}
-
-	ncpu, mem, ok := dockerResources(ctx, runner)
-	if !ok {
-		return ""
-	}
-	if ncpu >= minDockerCPU && mem >= minDockerMemBytes {
-		return ""
-	}
-
-	const gib = 1 << 30
-	// Show "2 GiB" rather than "2.0 GiB" for whole numbers.
-	detectedMem := strconv.FormatFloat(float64(mem)/gib, 'f', -1, 64)
-
-	return fmt.Sprintf(
-		"⚠️  Docker has %d CPU / %s GiB available; SnowOps Labs needs at least %d CPU / %d GiB.\n"+
-			"    A 3-node k3d cluster plus the platform stack (Prometheus, Grafana, Loki, …)\n"+
-			"    OOM-kills pods or fails with an API-server \"TLS handshake timeout\" below this.\n"+
-			"    Colima:         colima stop && colima start --cpu %d --memory %d\n"+
-			"    Docker Desktop: Settings → Resources → raise CPUs to %d and Memory to %d GB",
-		ncpu, detectedMem, minDockerCPU, minDockerMemBytes/gib,
-		minDockerCPU, minDockerMemBytes/gib, minDockerCPU, minDockerMemBytes/gib,
-	)
+// dockerReport is doctor's view of the Docker engine: a summary line, plus at
+// most one blocking problem or one note.
+type dockerReport struct {
+	line    string
+	problem string
+	note    string
 }
 
-// dockerResources reports the CPU count and total memory (bytes) the Docker
-// engine has, via `docker info`. ok is false when the value cannot be
-// determined (docker absent, daemon down, or unparseable output).
-func dockerResources(ctx context.Context, runner toolchain.Runner) (ncpu int, memBytes int64, ok bool) {
-	path, err := runner.LookPath("docker")
-	if err != nil {
-		return 0, 0, false
+// dockerCapacity checks the Docker engine against capacity.Floor. A missing
+// docker is left to the tool checks, which already report it.
+func dockerCapacity(ctx context.Context, runner toolchain.Runner, p capacity.Platform) dockerReport {
+	host := capacity.DetectHost(ctx, runner, p)
+	res, err := capacity.Probe(ctx, runner)
+	switch {
+	case errors.Is(err, capacity.ErrDockerMissing):
+		return dockerReport{}
+	case errors.Is(err, capacity.ErrNoPermission), errors.Is(err, capacity.ErrWSLIntegration):
+		return dockerReport{line: "not usable", problem: fmt.Sprintf("%v. Fix:\n    %s", err, host.AccessHint(err))}
+	case errors.Is(err, capacity.ErrDaemonDown) && host.Engine == capacity.EngineColima:
+		return dockerReport{line: "not running", note: fmt.Sprintf(
+			"colima is not running. 'labctl init' starts it for you at %s, or run:\n    %s",
+			capacity.Floor, host.StartHint(capacity.Floor))}
+	case errors.Is(err, capacity.ErrDaemonDown):
+		return dockerReport{line: "not running", problem: fmt.Sprintf(
+			"The Docker daemon is not running. Start it:\n    %s", host.StartHint(capacity.Floor))}
+	case err != nil:
+		return dockerReport{line: "unknown", note: fmt.Sprintf("Could not read Docker's CPU and memory: %v", err)}
 	}
-
-	// A hung daemon must not hang doctor.
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-
-	var buf bytes.Buffer
-	// --format gives machine-readable output; MemTotal is in bytes.
-	_, err = runner.Run(ctx, toolchain.Command{
-		Path:   path,
-		Args:   []string{"info", "--format", "{{.NCPU}} {{.MemTotal}}"},
-		Stdout: &buf,
-	})
-	if err != nil {
-		return 0, 0, false
+	if short := capacity.Shortfall(res, capacity.Floor); short != "" {
+		return dockerReport{line: res.String(), problem: fmt.Sprintf(
+			"%s\n    Below this the API server runs out of memory and every command fails with\n"+
+				"    \"TLS handshake timeout\". Fix:\n    %s", short, host.ResizeHint(capacity.Floor))}
 	}
-
-	fields := strings.Fields(buf.String())
-	if len(fields) != 2 {
-		return 0, 0, false
-	}
-	ncpu, err = strconv.Atoi(fields[0])
-	if err != nil {
-		return 0, 0, false
-	}
-	memBytes, err = strconv.ParseInt(fields[1], 10, 64)
-	if err != nil {
-		return 0, 0, false
-	}
-	if ncpu <= 0 || memBytes <= 0 {
-		return 0, 0, false
-	}
-	return ncpu, memBytes, true
+	return dockerReport{line: fmt.Sprintf("%s — meets the minimum (%s). Heavier scenarios say what they need.",
+		res, capacity.Floor)}
 }
 
 func init() {

@@ -81,7 +81,7 @@ func TestValidate(t *testing.T) {
 	}{
 		{name: "no template", input: "plain string"},
 		{name: "empty", input: ""},
-		{name: "known built-in", input: "http://grafana.{{.DomainSuffix}}"},
+		{name: "known built-in", input: "http://grafana.{{.IngressURLSuffix}}"},
 		{name: "known workload var", input: "deployment/{{.WorkloadName}}"},
 		{name: "several known vars", input: "{{.WorkloadName}}.{{.WorkloadNamespace}}:{{.WorkloadPort}}"},
 		{name: "spaces inside braces", input: "{{ .IngressClass }}"},
@@ -208,5 +208,25 @@ func TestFieldNamesIsStable(t *testing.T) {
 		if n == "" || strings.ToUpper(n[:1]) != n[:1] {
 			t.Errorf("field %q is not exported", n)
 		}
+	}
+}
+
+func TestValidate_URLsNeedIngressURLSuffix(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   string
+		wantErr bool
+	}{
+		{name: "url from domain suffix", input: "http://grafana.{{.DomainSuffix}}/d/x", wantErr: true},
+		{name: "url with templated host", input: "curl https://{{.WorkloadName}}.{{ .DomainSuffix }}/health", wantErr: true},
+		{name: "url from ingress url suffix", input: "http://grafana.{{.IngressURLSuffix}}/d/x", wantErr: false},
+		{name: "hostname from domain suffix", input: "host: {{.WorkloadName}}.{{.DomainSuffix}}", wantErr: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := Validate(tt.input); (err != nil) != tt.wantErr {
+				t.Errorf("Validate(%q) = %v, wantErr %v", tt.input, err, tt.wantErr)
+			}
+		})
 	}
 }

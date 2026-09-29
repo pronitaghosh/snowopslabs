@@ -42,7 +42,7 @@ echo "Waiting for Traefik to be ready..."
 kubectl rollout status deployment/traefik -n $NAMESPACE --timeout=120s
 
 # Create IngressRoute for Traefik Dashboard
-DOMAIN_SUFFIX="${DOMAIN_SUFFIX:-k3d.local}"
+DOMAIN_SUFFIX="${DOMAIN_SUFFIX:-${CLUSTER_NAME:-snowops}.localhost}"
 cat <<EOF | kubectl apply -f -
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
@@ -61,4 +61,4 @@ spec:
 EOF
 
 echo "Traefik installed successfully."
-echo "    Dashboard: http://traefik.${DOMAIN_SUFFIX}/dashboard/"
+echo "    Dashboard: http://traefik.${INGRESS_URL_SUFFIX:-${DOMAIN_SUFFIX:-${CLUSTER_NAME:-snowops}.localhost}}/dashboard/"

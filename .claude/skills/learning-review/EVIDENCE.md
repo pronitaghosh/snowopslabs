@@ -5,7 +5,7 @@ The commands each phase runs. Set the environment once:
 ```sh
 PATH_NAME=kubernetes-foundations
 CHALLENGE=make-the-slo-green
-DOMAIN_SUFFIX=k3d.local
+DOMAIN_SUFFIX=snowops.localhost
 NOTES=$SCRATCHPAD/review-$PATH_NAME.md        # every command and output lands here
 ```
 
@@ -119,7 +119,7 @@ never established fails on a fresh one.
 
 ```sh
 ./bin/labctl learn progress "$PATH_NAME"      # mid-path: accurate?
-ls .labctl/learn/                             # progress is stored here
+ls ~/.snowops/state/snowops/learn/            # progress is stored here
 # start a new shell, then:
 ./bin/labctl learn progress "$PATH_NAME"      # survived?
 ./bin/labctl learn next "$PATH_NAME"          # re-running a completed module is safe

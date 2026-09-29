@@ -9,12 +9,16 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
+	"slices"
+	"strings"
 
 	"github.com/spf13/cobra"
 
 	"github.com/sagar2395/snowopslabs/internal/config"
 	"github.com/sagar2395/snowopslabs/internal/executor"
 	"github.com/sagar2395/snowopslabs/internal/incident"
+	"github.com/sagar2395/snowopslabs/internal/labcheck"
 	"github.com/sagar2395/snowopslabs/internal/platform"
 	"github.com/sagar2395/snowopslabs/internal/runtime"
 	"github.com/sagar2395/snowopslabs/internal/scenario"
@@ -68,6 +72,16 @@ var rootCmd = &cobra.Command{
 			return fmt.Errorf("loading config: %w", err)
 		}
 		slog.Debug("config loaded", "root", cfg.ProjectRoot, "profile", cfg.Profile, "cluster", cfg.ClusterName)
+		if msg := versionSkew(cmd.Root().Version, config.LabVersion(cfg.ProjectRoot), cfg.ProjectRoot); msg != "" {
+			fmt.Fprintln(cmd.ErrOrStderr(), msg)
+		}
+		legacyState := filepath.Join(cfg.ProjectRoot, ".labctl")
+		switch moved, err := config.MigrateState(legacyState, cfg.StateDir); {
+		case err != nil:
+			fmt.Fprintf(cmd.ErrOrStderr(), "Warning: %v\n", err)
+		case moved:
+			fmt.Fprintf(cmd.ErrOrStderr(), "Moved the lab state from %s to %s.\n", legacyState, cfg.StateDir)
+		}
 
 		scriptExec = executor.New(cfg.ProjectRoot)
 		// Pass every value from .env and runtime.env to child scripts and Make
@@ -78,15 +92,22 @@ var rootCmd = &cobra.Command{
 		// Set the core cluster settings explicitly, so scripts get them (or
 		// their defaults) even without .env or runtime.env.
 		scriptExec.SetEnv("CLUSTER_NAME", cfg.ClusterName)
+		scriptExec.SetEnv("PROJECT_ROOT", cfg.ProjectRoot)
+		scriptExec.SetEnv("LAB_STATE_DIR", cfg.StateDir)
 		scriptExec.SetEnv("DOMAIN_SUFFIX", cfg.DomainSuffix)
+		// Scripts build lab URLs from this so a fallback ingress port is kept.
+		scriptExec.SetEnv("INGRESS_URL_SUFFIX", cfg.IngressURLSuffix())
 		scriptExec.SetEnv("HTTP_PORT", cfg.HTTPPort)
 		scriptExec.SetEnv("HTTPS_PORT", cfg.HTTPSPort)
+		scriptExec.SetEnv("LAB_CPUS", cfg.LabCPUs)
+		scriptExec.SetEnv("LAB_MEMORY", cfg.LabMemory)
 		scriptExec.SetEnv("INGRESS_CLASS", cfg.IngressClass)
 		scriptExec.SetEnv("INGRESS_PROVIDER", cfg.IngressProvider)
 		scriptExec.SetEnv("STORAGE_CLASS", cfg.StorageClass)
 		scriptExec.SetEnv("PROFILE", cfg.Profile)
 		scriptExec.SetEnv("MONITORING_NAMESPACE", cfg.MonitoringNamespace)
 		reg = platform.NewRegistryWithNamespace(cfg.ProjectRoot, cfg.MonitoringNamespace)
+		reg.StateRoot = cfg.StateDir
 		// The workload binding both engines resolve {{.Workload*}} against.
 		// APP_NAME selects it (ADR-0014); --app overrides it for one command,
 		// and bindWorkload treats that deliberate choice more strictly.
@@ -146,18 +167,20 @@ func bindWorkload(appName string, explicit bool) error {
 	scriptExec.SetEnv("WORKLOAD_METRIC", bound.Metric)
 
 	scenes = scenario.NewEngine(cfg.ProjectRoot, cfg.DomainSuffix, cfg.Profile)
+	scenes.StateRoot = cfg.StateDir
 	scenes.MonitoringNamespace = cfg.MonitoringNamespace
 	scenes.IngressClass = cfg.IngressClass
+	scenes.IngressURLSuffix = cfg.IngressURLSuffix()
 	scenes.Workload = bound
 	scenes.Contract = boundContract
 
 	incEng = incident.NewEngine(cfg.ProjectRoot, cfg.DomainSuffix)
+	incEng.StateRoot = cfg.StateDir
+	incEng.IngressURLSuffix = cfg.IngressURLSuffix()
 	incEng.MonitoringNamespace = cfg.MonitoringNamespace
 	incEng.Workload = bound
-	incEng.AlertmanagerURL = os.Getenv("ALERTMANAGER_URL")
-	if incEng.AlertmanagerURL == "" {
-		incEng.AlertmanagerURL = "http://alertmanager." + cfg.DomainSuffix
-	}
+	incEng.AlertmanagerURL = labcheck.AlertmanagerURL(cfg)
+	attachAdmissionGate()
 	return nil
 }
 
@@ -220,9 +243,62 @@ func SetVersion(v string) {
 // build-time -X main.version ldflag (see cmd/labctl/main.go).
 func Execute(version string) {
 	SetVersion(version)
+	if err := addUserBinToPath(); err != nil {
+		slog.Warn("could not add ~/.local/bin to PATH; tools installed there may not be found", "err", err)
+	}
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
 	}
+}
+
+// versionSkew warns when the labctl binary and the lab at root (its
+// LAB_VERSION) belong to different releases, and says how to bring them in
+// step. It says nothing for a development build of labctl, or for a lab
+// without LAB_VERSION.
+func versionSkew(binary, lab, root string) string {
+	binary = strings.TrimPrefix(binary, "v")
+	lab = strings.TrimPrefix(lab, "v")
+	if lab == "" || binary == "dev" || strings.ContainsAny(binary, "-+") || binary == lab {
+		return ""
+	}
+	if strings.Contains(lab, "-") {
+		return fmt.Sprintf("Warning: labctl is %s but %s is development content (%s). Use a release:\n"+
+			"  cd %s && git switch stable && ./install.sh\n"+
+			"or build labctl from this checkout: make cli-build", binary, root, lab, root)
+	}
+	return fmt.Sprintf("Warning: labctl is %s but the lab in %s is %s. Install the labctl that matches it:\n"+
+		"  cd %s && ./install.sh", binary, root, lab, root)
+}
+
+// addUserBinToPath puts ~/.local/bin, where setup-tools installs kubectl, helm
+// and k3d on Linux and WSL, at the front of labctl's own PATH, so a tool it has
+// just installed works before the user's shell has that directory. The user's
+// PATH is kept in SNOWOPS_ORIGINAL_PATH so setup-tools can tell them to add it.
+// Without a home directory there is nothing to add.
+func addUserBinToPath() error {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil //nolint:nilerr // no home directory means no ~/.local/bin to add
+	}
+	path := os.Getenv("PATH")
+	if err := os.Setenv("SNOWOPS_ORIGINAL_PATH", path); err != nil {
+		return fmt.Errorf("setting SNOWOPS_ORIGINAL_PATH: %w", err)
+	}
+	if err := os.Setenv("PATH", withUserBin(path, filepath.Join(home, ".local", "bin"))); err != nil {
+		return fmt.Errorf("setting PATH: %w", err)
+	}
+	return nil
+}
+
+// withUserBin prepends dir to path unless it is already there.
+func withUserBin(path, dir string) string {
+	if slices.Contains(filepath.SplitList(path), dir) {
+		return path
+	}
+	if path == "" {
+		return dir
+	}
+	return dir + string(os.PathListSeparator) + path
 }
 
 func init() {

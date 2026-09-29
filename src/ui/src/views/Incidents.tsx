@@ -38,6 +38,12 @@ function requiresLabel(f: Fault) {
   return [...plat, ...(f.pinnedApps ?? [])].join(' · ')
 }
 
+/** Why the detection check failed, without the trailing full stop the banner
+ *  adds itself. */
+function checkDetail(check: NonNullable<IncidentStatus['check']>) {
+  return (check.explanation || check.error || '').replace(/[.\s]+$/, '')
+}
+
 function relTime(iso?: string) {
   if (!iso) return ''
   const t = new Date(iso).getTime()
@@ -250,7 +256,7 @@ export function Incidents({ notify, requestConfirm }: IncidentsProps) {
                 <span className="banner-body">
                   {resolved
                     ? <>Detection check <code>{status.check.name}</code> passes — resolved.</>
-                    : <>Not resolved yet — <code>{status.check.name}</code> fails{status.check.explanation ? `: ${status.check.explanation}` : status.check.error ? `: ${status.check.error}` : ''}.</>}
+                    : <>Not resolved yet — <code>{status.check.name}</code> fails{checkDetail(status.check) ? `: ${checkDetail(status.check)}` : ''}.</>}
                 </span>
               </div>
             )}

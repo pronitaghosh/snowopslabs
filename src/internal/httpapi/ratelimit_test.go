@@ -90,7 +90,7 @@ func TestAuthLogin_RateLimitsCredentialStuffing(t *testing.T) {
 		users:       auth.NewStore(), // empty: every attempt is a failed login
 		sessions:    auth.NewSessionStore(0),
 		loginLimit:  newLoginLimiter(5, time.Minute),
-		cfg:         &config.Config{ProjectRoot: t.TempDir()},
+		cfg:         &config.Config{ProjectRoot: t.TempDir(), StateDir: t.TempDir()},
 	}
 	s.setupRoutes()
 

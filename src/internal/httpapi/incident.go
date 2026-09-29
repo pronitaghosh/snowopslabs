@@ -7,27 +7,19 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"os"
 	"strconv"
 	"time"
 
 	"github.com/sagar2395/snowopslabs/internal/incident"
+	"github.com/sagar2395/snowopslabs/internal/labcheck"
 	"github.com/sagar2395/snowopslabs/pkg/checks"
 )
 
 func (s *Server) incidentRunner() *checks.Runner {
-	r := checks.NewRunner()
+	r := labcheck.NewRunner(s.cfg, s.incidents.Workload, "")
 	r.DefaultTimeout = 10 * time.Second
-	promURL := os.Getenv("PROMETHEUS_URL")
-	if promURL == "" {
-		promURL = "http://prometheus." + s.cfg.DomainSuffix
-	}
-	r.PrometheusURL = promURL
 	if s.incidents.AlertmanagerURL == "" {
-		s.incidents.AlertmanagerURL = os.Getenv("ALERTMANAGER_URL")
-		if s.incidents.AlertmanagerURL == "" {
-			s.incidents.AlertmanagerURL = "http://alertmanager." + s.cfg.DomainSuffix
-		}
+		s.incidents.AlertmanagerURL = labcheck.AlertmanagerURL(s.cfg)
 	}
 	return r
 }
@@ -123,9 +115,15 @@ func (s *Server) injectAndRespond(w http.ResponseWriter, r *http.Request, name s
 	respondJSON(w, http.StatusOK, resp)
 }
 
+// incidentStatusBudget is the time limit for one status request. A detection
+// check on a lab that is still broken often waits out its own timeoutSeconds
+// (30s for the built-in faults), so the budget must exceed it or the UI can
+// only ever report "time limit ran out", never "not resolved".
+const incidentStatusBudget = 2 * time.Minute
+
 // handleIncidentStatus runs the active incident's detection check.
 func (s *Server) handleIncidentStatus(w http.ResponseWriter, r *http.Request) {
-	ctx, cancel := context.WithTimeout(r.Context(), 12*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), incidentStatusBudget)
 	defer cancel()
 
 	// Check the app the fault was injected into; a check aimed at the wrong

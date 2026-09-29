@@ -11,6 +11,10 @@ prerequisites:
     - monitoring/metrics
   apps:
     - "{{.WorkloadName}}"
+# Memory for this scenario's own workloads; shared releases, platform
+# components and apps are counted from config/footprints.yaml.
+requirements:
+  memory: 400Mi
 runtimes:
   - k3d
   - kind
@@ -130,7 +134,7 @@ snippets:
 explore:
   urls:
     - label: "Grafana — mesh traffic: split, latency and mTLS coverage"
-      url: "http://grafana.{{.DomainSuffix}}/d/mesh-traffic"
+      url: "http://grafana.{{.IngressURLSuffix}}/d/mesh-traffic"
   commands:
     - label: "Apply the weighted split (do this first — nothing else stages it)"
       command: "labctl scenario render mesh-traffic-management manifests/virtualservice.yaml --app {{.WorkloadName}} | kubectl apply -f -"

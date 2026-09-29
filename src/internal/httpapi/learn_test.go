@@ -42,7 +42,7 @@ func newLearnServer(t *testing.T) *Server {
 		t.Fatal(err)
 	}
 	return &Server{
-		cfg: &config.Config{ProjectRoot: root, DomainSuffix: "k3d.local"},
+		cfg: &config.Config{ProjectRoot: root, StateDir: filepath.Join(root, ".labctl"), DomainSuffix: "k3d.local"},
 	}
 }
 

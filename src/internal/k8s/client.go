@@ -5,6 +5,7 @@
 package k8s
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -22,7 +23,10 @@ type ClusterInfo struct {
 	Server     string `json:"server"`
 	K8sVersion string `json:"k8sVersion"`
 	NodeCount  int    `json:"nodeCount"`
-	Connected  bool   `json:"connected"`
+	// Connected means the API server answered, not merely that a context is
+	// configured. When it is false, Error says why in kubectl's words.
+	Connected bool   `json:"connected"`
+	Error     string `json:"error,omitempty"`
 }
 
 // PodInfo holds information about a pod.
@@ -74,6 +78,10 @@ func GetClusterInfo(ctx context.Context) (*ClusterInfo, error) {
 		return info, nil //nolint:nilerr // no current-context means not connected — report empty info, not an error
 	}
 	info.Context = ctxOut
+	if err := Reachable(ctx); err != nil {
+		info.Error = unreachableReason(err)
+		return info, nil
+	}
 	info.Connected = true
 
 	serverOut, err := kubectl(ctx, "config", "view", "--minify", "-o", "jsonpath={.clusters[0].cluster.server}")
@@ -351,14 +359,25 @@ func NamespaceHealth(ctx context.Context, namespace string) (ready, total int, e
 	if err != nil {
 		return 0, 0, true
 	}
+	ready, total = podHealth(pods)
+	return ready, total, true
+}
+
+// podHealth counts pods and how many of them are fully ready. A Failed pod,
+// such as one evicted while the cluster was stopped, is left out: its
+// controller has replaced it, and the replacement is counted instead.
+func podHealth(pods []PodInfo) (ready, total int) {
 	for _, p := range pods {
+		if p.Status == "Failed" {
+			continue
+		}
 		total++
-		// A finished Job pod is not unhealthy, so it is not counted.
+		// A finished Job pod is not unhealthy, so it counts as ready.
 		if p.Status == "Succeeded" || (p.Status == "Running" && allContainersReady(p.Ready)) {
 			ready++
 		}
 	}
-	return ready, total, true
+	return ready, total
 }
 
 // allContainersReady parses the "n/m" readiness string PodInfo carries.
@@ -397,6 +416,26 @@ func HelmReleaseExists(ctx context.Context, namespace, release string) bool {
 	return err == nil && strings.TrimSpace(out) != ""
 }
 
+// HelmReleaseDeployed reports whether release has a revision in the
+// "deployed" state, which a release left by a failed install does not.
+func HelmReleaseDeployed(ctx context.Context, namespace, release string) bool {
+	if namespace == "" || release == "" {
+		return false
+	}
+	out, err := kubectl(ctx, "get", "secret", "-n", namespace,
+		"-l", "owner=helm,name="+release+",status=deployed", "--no-headers")
+	return err == nil && strings.TrimSpace(out) != ""
+}
+
+// AgentCount is the number of nodes without the control-plane role.
+func AgentCount(ctx context.Context) (int, error) {
+	out, err := kubectl(ctx, "get", "nodes", "-l", "!node-role.kubernetes.io/control-plane", "-o", "name")
+	if err != nil {
+		return 0, fmt.Errorf("listing agent nodes: %w", err)
+	}
+	return len(strings.Fields(out)), nil
+}
+
 // GetCurrentContext returns the current kubectl context name.
 func GetCurrentContext(ctx context.Context) (string, error) {
 	return kubectl(ctx, "config", "current-context")
@@ -427,6 +466,46 @@ func uniqueLines(out string) []string {
 }
 
 // RunKubectl executes a kubectl command and returns its stdout.
+// Reachable asks the current context's API server whether it is ready. A
+// configured context says nothing about whether the cluster is up.
+func Reachable(ctx context.Context) error {
+	_, err := kubectl(ctx, "get", "--raw=/readyz", "--request-timeout=5s")
+	return err
+}
+
+// maxReasonRunes bounds the reason shown for an unreachable cluster, so a long
+// kubectl message cannot flood the UI banner.
+const maxReasonRunes = 200
+
+// unreachableReason turns a failed probe into one short line, such as
+// "net/http: TLS handshake timeout": the last line kubectl printed, without
+// its generic prefix.
+func unreachableReason(err error) string {
+	msg := err.Error()
+	var ke *kubectlError
+	if errors.As(err, &ke) {
+		msg = ke.stderr
+	}
+	if i := strings.LastIndex(msg, "\n"); i >= 0 {
+		msg = msg[i+1:]
+	}
+	msg = strings.TrimPrefix(msg, "Unable to connect to the server: ")
+	if runes := []rune(msg); len(runes) > maxReasonRunes {
+		msg = string(runes[:maxReasonRunes]) + "…"
+	}
+	return msg
+}
+
+// kubectlError is a failed kubectl run together with what it printed to
+// stderr, which is the useful part of the failure.
+type kubectlError struct {
+	err    error
+	stderr string
+}
+
+func (e *kubectlError) Error() string { return e.err.Error() + ": " + e.stderr }
+func (e *kubectlError) Unwrap() error { return e.err }
+
 func RunKubectl(ctx context.Context, args ...string) (string, error) {
 	return kubectl(ctx, args...)
 }
@@ -441,6 +520,11 @@ func kubectl(ctx context.Context, args ...string) (string, error) {
 	cmd.Env = os.Environ()
 	out, err := cmd.Output()
 	if err != nil {
+		// Keep kubectl's own explanation; "exit status 1" alone says nothing.
+		var ee *exec.ExitError
+		if errors.As(err, &ee) && len(bytes.TrimSpace(ee.Stderr)) > 0 {
+			return "", &kubectlError{err: err, stderr: strings.TrimSpace(string(ee.Stderr))}
+		}
 		return "", err
 	}
 	return strings.TrimSpace(string(out)), nil

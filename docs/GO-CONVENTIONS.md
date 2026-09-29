@@ -159,11 +159,8 @@ gets its own copies.
 - A doc comment sits directly above the declaration it describes. A comment
   separated from its declaration is attached to whatever follows it, and
   `go doc` shows it there.
-- Say why, not what. Keep comments under three lines and leave out task and
-  ticket numbers ([invariants](AGENT-CONTEXT.md#invariants)).
-- Describe the code as it is now. A reader should understand it without
-  knowing its history, so leave out "used to", "v1", "the old path" and
-  accounts of past bugs. Put that story in the commit message.
+- What a comment may and may not say is the comment rule in
+  [CLAUDE.md](../CLAUDE.md#hard-rules).
 - Delete comments that repeat the code, such as `// Get pods` above a call
   to `GetPods`.
 - Every package has exactly one `// Package x ...` comment, in its main file.

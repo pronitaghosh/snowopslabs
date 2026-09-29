@@ -17,11 +17,11 @@ backup_ns() {
   echo "${1:-${WORKLOAD_NAMESPACE}}"
 }
 
-# Archives and drill state live under .labctl (gitignored runtime state).
-# PROJECT_ROOT is exported by labctl; a bare relative path would resolve against
-# whatever directory the learner happened to be in.
+# Archives belong to the running lab, so they live in its state directory.
+# labctl sets LAB_STATE_DIR; the fallback is its default location, so the
+# scripts work the same when a learner runs them by hand from any directory.
 backup_dir() {
-  echo "${BACKUP_DIR:-${PROJECT_ROOT:-.}/.labctl/backups}"
+  echo "${BACKUP_DIR:-${LAB_STATE_DIR:-${SNOWOPS_HOME:-$HOME/.snowops}/state/${CLUSTER_NAME:-snowops}}/backups}"
 }
 
 archive_path() { echo "$(backup_dir)/$(backup_ns "${1:-}")-latest.json"; }

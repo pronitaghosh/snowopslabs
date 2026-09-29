@@ -37,6 +37,6 @@ opencost:
       enabled: true
       ingressClassName: traefik
       hosts:
-        - host: opencost.k3d.local
+        - host: opencost.snowops.localhost
           paths:
             - /

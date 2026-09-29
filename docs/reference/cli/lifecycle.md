@@ -6,19 +6,62 @@ Building the lab, checking the machine, and reading back what labctl did.
 
 | Command | What it does |
 |---|---|
-| `labctl init` | Install tools, create the cluster, install platform components. Same as `make setup-tools && make runtime-up && make platform-up`. |
+| `labctl init` | Install tools, start Docker at the lab's size, check Docker's resources, create the cluster, install the platform, then check the cluster is healthy. A lab still on the old `*.k3d.local` or `*.kind.local` hostnames moves to `*.localhost` in place. Safe to re-run: it is also how the lab comes back after a reboot. |
 | `labctl teardown` | Deactivate scenarios and incidents, destroy apps, remove the platform, delete the cluster. |
 | `labctl reset` | `teardown` followed by `init`. |
-| `labctl status` | Cluster info, platform health and deployed apps in one view. |
+| `labctl status` | Cluster info, platform health and deployed apps in one view. When the cluster is configured but not answering it says so, with the reason, instead of listing everything as not installed. |
+
+### What `init` checks
+
+`init` fails loudly rather than reporting a lab that does not work:
+
+- **Docker size.** On macOS, a stopped colima is started at `LAB_CPUS` /
+  `LAB_MEMORY` (default 2 CPU / 4 GB) and never shrunk below its current size.
+  A Docker engine that is already running below the 2 CPU / 4 GB minimum is
+  refused, with the resize command for your setup (colima, Docker Desktop, WSL
+  or native Linux). labctl does not resize a running engine itself, because
+  that would stop your other containers.
+- **Image downloads.** Cluster images are pulled up front with progress; a
+  download that stalls is retried once and then reported, instead of hanging.
+- **Platform.** If Prometheus or Grafana fails to install, `init` exits
+  non-zero and lists what failed. Installs are safe to repeat.
+- **Health.** `init` ends by checking the API server answers and every node is
+  Ready. Only then does it print "Lab is up", with the lab's real URLs.
+- **An existing lab is kept.** Re-running `init` — the way back after a reboot —
+  never deletes the cluster. It restarts it in order if it is unhealthy, skips
+  platform installs that are already deployed and waits for their pods to be
+  Ready. If the cluster still cannot be reached it stops and suggests
+  `labctl reset`, which rebuilds from scratch on purpose.
+- **URLs and ports.** Lab hostnames are `<service>.<cluster>.localhost`, so each
+  lab on a machine has its own (and its own browser cookies). When host ports
+  80/443 are taken, the cluster's ingress falls back to free ones (8080/8443 and
+  up). `~/.snowops/clusters/<name>.env` records the ports and the domain suffix
+  the cluster was built with, and every URL labctl prints, the UI's links and
+  every check use them. After the platform is up, `init` requests the lab's
+  Grafana through that port from this machine; if something else answers (a port
+  taken after the lab was built), a k3d lab gets free ports added to its load
+  balancer (`k3d cluster edit --port-add`, no rebuild) and kind says how to
+  change them. Checks reach lab hostnames on `127.0.0.1` directly, so grading
+  needs no `/etc/hosts` entries and ignores `HTTP_PROXY`.
+- **Dashboards have data.** `init` then asks Grafana to query its Prometheus
+  datasource. If it cannot, `init` re-applies Grafana with the lab's current
+  values (an existing lab otherwise keeps the values it was installed with) and
+  checks again; if it still cannot, `init` exits with Grafana's reason. When
+  Grafana refuses the admin password, `init` says so and skips the check: set
+  `GRAFANA_ADMIN_PASSWORD` in `.env` to the password you chose.
+- **Names.** A cluster name is unique on a machine, across k3d and kind; the
+  defaults are `snowops` (k3d) and `snowops-kind` (kind).
 
 ## Preparing a machine
 
 ### `labctl doctor`
 
-Verifies every external tool the lab depends on: installed, new enough, and the
-cluster reachable. Each problem is reported with why it matters and how to fix
-it. Exits non-zero when anything required is missing, so it is safe as a script
-gate.
+Verifies every external tool the lab depends on (installed and new enough) and
+that Docker is running with at least the lab's minimum of 2 CPU / 4 GB. Each
+problem is reported with why it matters and the exact command that fixes it on
+your setup. Exits non-zero when anything required is missing, Docker is not
+running, or Docker is too small, so it is safe as a script gate. A stopped
+colima is only a note: `labctl init` starts it.
 
 ```bash
 labctl doctor
@@ -26,9 +69,32 @@ labctl doctor
 
 ### `labctl setup-tools`
 
-Installs those tools, version-pinned from `config/versions.env`, for the active
-`PROFILE`. This is the first step of `init`; run it alone to prepare a machine
-without creating a cluster. Equivalent to `make setup-tools`.
+Installs the tools the active `PROFILE` needs: kubectl, helm, and k3d or kind,
+plus a Docker engine. This is the first step of `init`; run it alone to prepare
+a machine without creating a cluster. Equivalent to `make setup-tools`.
+
+A tool at or above its minimum in `config/versions.env` is left alone, so your
+own newer copy is never replaced. Otherwise:
+
+| OS | How tools are installed | Needs sudo? |
+|---|---|---|
+| macOS | Homebrew (`kubernetes-cli`, `helm`, `k3d`, `kind`, `colima`, `docker`, `docker-buildx`); an older brew install is upgraded | no (installing Homebrew itself asks once) |
+| Linux, WSL2 | the pinned version from `versions.env`, downloaded into `~/.local/bin` (`SNOWOPS_BIN_DIR` overrides) | only for Docker Engine |
+
+labctl puts `~/.local/bin` on its own PATH, so freshly installed tools work
+straight away; setup-tools prints the line to add to your shell profile so
+`kubectl` works in your own terminal too.
+
+Docker on Linux and WSL:
+
+- **Just added to the `docker` group:** the group only applies to new login
+  sessions, so setup-tools stops and says so. Log out and back in (WSL:
+  `wsl --shutdown` in PowerShell, then reopen), then re-run `labctl init`.
+- **Docker Desktop installed on Windows but not enabled for this distro:**
+  setup-tools does not install a second Docker; it tells you to turn on
+  Settings → Resources → WSL Integration for the distro.
+- **WSL without systemd:** Docker is started with `service`, and setup-tools
+  explains how to enable systemd so it starts on its own.
 
 ### `labctl check`
 
@@ -42,9 +108,16 @@ labctl check ingress    # the ingress controller is running and responding
 
 ### `labctl hosts`
 
-Manages a labctl-owned block in `/etc/hosts` so cluster ingress hostnames
-(`*.k3d.local`) resolve. The block is delimited and rewritten in place, so it is
-safe to run repeatedly.
+Lab URLs use `<service>.<cluster>.localhost` (for example
+`grafana.snowops.localhost`) by default, and every browser resolves
+`*.localhost` to this machine, so a default lab needs no hosts entries and
+`hosts add` says so and does nothing. It is for a lab with a `DOMAIN_SUFFIX`
+you set. A lab built before the `.localhost` default (`*.k3d.local` or
+`*.kind.local`) needs none either: `labctl init` moves it to
+`<cluster>.localhost` in place, unless `DOMAIN_SUFFIX` is set in the
+environment or `.env`. It manages a labctl-owned block in `/etc/hosts` so those hostnames
+resolve; the block is delimited and rewritten in place, so it is safe to run
+repeatedly.
 
 ```bash
 labctl hosts add      # add or refresh the managed block; asks for sudo to write
@@ -67,8 +140,8 @@ The block lists three sources, sorted:
 A host outside the domain suffix is never written. If the cluster cannot be
 read, the platform and app hostnames are still written and a warning says so.
 
-`labctl scenario up` and `labctl app deploy` list any Ingress hostname the
-managed block does not cover yet, so a new hostname is announced before a
+On such a lab, `labctl scenario up` and `labctl app deploy` list any Ingress
+hostname the managed block does not cover yet, so a new hostname is announced before a
 browser fails to resolve it. Re-run `hosts add` when they do.
 
 ## The cluster
@@ -95,7 +168,7 @@ Which profile is used comes from `PROFILE` (`k3d`, `kind` or `incluster`); see
 ## Snapshots and lab reset
 
 A snapshot records **intent** — which platform components, apps and scenarios
-are active — as a small YAML file in `.labctl/snapshots/`. It is not a copy of
+are active — as a small YAML file in `~/.snowops/state/<cluster>/snapshots/`. It is not a copy of
 cluster bytes. Restore replays the normal idempotent install paths.
 
 ```bash
@@ -108,7 +181,7 @@ labctl lab reset --yes                # non-interactive
 ```
 
 - **Snapshot sources** — platform components from labctl's install markers in
-  `.labctl/platform/`, scenarios from the scenario engine's state, apps by live
+  `~/.snowops/state/<cluster>/platform/`, scenarios from the scenario engine's state, apps by live
   kubectl probe. Anything installed outside labctl is not tracked.
 - **Restore order** — ingress, then monitoring, then the remaining platform
   components, then apps, then scenarios. Already-active pieces are skipped, so

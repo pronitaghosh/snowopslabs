@@ -194,7 +194,7 @@ if [ -n "${MISSING// /}" ]; then
   printf '           %s\n' ${MISSING} >&2
   echo "         Any pod that needs one will land in ImagePullBackOff — they are lab" >&2
   echo "         builds and exist in no registry. Rebuild before rescheduling, e.g.:" >&2
-  echo "           DOCKER_IMAGE_TAG=<tag> bash src/engine/build/docker.sh <app> --import" >&2
+  echo "           DOCKER_IMAGE_TAG=<tag> bash ${PROJECT_ROOT:-$(cd "$(dirname "$0")/../../.." && pwd)}/src/engine/build/docker.sh <app> --import" >&2
 fi
 
 # k3d's load balancer holds its nginx upstreams as a fixed list of node names,

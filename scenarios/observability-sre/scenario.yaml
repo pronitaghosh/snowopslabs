@@ -17,6 +17,10 @@ prerequisites:
     - prometheus-metrics
     - otlp-tracing
     - readiness-toggle
+# Memory for this scenario's own workloads; shared releases, platform
+# components and apps are counted from config/footprints.yaml.
+requirements:
+  memory: 450Mi
 runtimes:
   - k3d
   - kind
@@ -151,7 +155,7 @@ checks:
 
   - name: grafana-reachable
     type: http
-    url: "http://grafana.{{.DomainSuffix}}"
+    url: "http://grafana.{{.IngressURLSuffix}}"
     expectStatus: 200
     remediation: "Grafana is a platform prerequisite. Bring it up and confirm the host resolves: labctl platform up monitoring/grafana"
 
@@ -221,7 +225,7 @@ snippets:
     description: "Until you run it, the app exports nowhere and Tempo stays empty. It is a plain 'kubectl set env' on the Deployment — setting OTEL_EXPORTER_OTLP_ENDPOINT patches the pod template and rolls the pods, the same mechanism as any other config change."
     path: scripts/enable-tracing.sh
     exercise: true
-    apply: "bash scenarios/observability-sre/scripts/enable-tracing.sh --app {{.WorkloadName}} --namespace {{.WorkloadNamespace}}"
+    apply: "bash {{.ProjectRoot}}/scenarios/observability-sre/scripts/enable-tracing.sh --app {{.WorkloadName}} --namespace {{.WorkloadNamespace}}"
   - label: "SRE alerting rules (error rate, latency, saturation, readiness)"
     description: "A PrometheusRule with the golden-signal alerts this scenario installs: 5xx error rate, p99 latency, memory/CPU saturation, and pod readiness. Trip one with the traffic/fault commands and watch it fire. The release: prometheus label is what makes Prometheus load the rules — a wrong value fails silently."
     path: manifests/alerting-rules.yaml
@@ -243,12 +247,12 @@ references:
 explore:
   urls:
     - label: "Grafana — SRE Golden Signals dashboard"
-      url: "http://grafana.{{.DomainSuffix}}/d/observability-sre"
+      url: "http://grafana.{{.IngressURLSuffix}}/d/observability-sre"
     - label: "Prometheus"
-      url: "http://prometheus.{{.DomainSuffix}}"
+      url: "http://prometheus.{{.IngressURLSuffix}}"
   commands:
     - label: "1. Wire the app to the collector (do this first — nothing stages it)"
-      command: "bash scenarios/observability-sre/scripts/enable-tracing.sh --app {{.WorkloadName}} --namespace {{.WorkloadNamespace}}"
+      command: "bash {{.ProjectRoot}}/scenarios/observability-sre/scripts/enable-tracing.sh --app {{.WorkloadName}} --namespace {{.WorkloadNamespace}}"
     - label: "2. Generate sustained load with k6 (not a curl loop — real arrival-rate traffic)"
       command: "labctl traffic start --app {{.WorkloadName}} --profile steady --rps 25 --duration 20m"
     - label: "2. Watch the generator itself — this is a plain Kubernetes Job"
@@ -258,7 +262,7 @@ explore:
     - label: "4. Confirm the app is counting them (server-side truth)"
       command: "kubectl -n {{.WorkloadNamespace}} exec deploy/{{.WorkloadName}} -- wget -qO- localhost:{{.WorkloadPort}}/metrics | grep '^{{.WorkloadMetric}}_count'"
     - label: "5. Compare client-side vs server-side in Grafana"
-      command: "open 'http://grafana.{{.DomainSuffix}}/d/app-requests?var-app={{.WorkloadName}}'  # k6 sent vs app handled — the two lines should overlap"
+      command: "open 'http://grafana.{{.IngressURLSuffix}}/d/app-requests?var-app={{.WorkloadName}}'  # k6 sent vs app handled — the two lines should overlap"
     - label: "6. Query {{.WorkloadName}} logs in Loki"
       command: "Open Grafana > Explore > Loki > {namespace=\"{{.WorkloadNamespace}}\"} | json | line_format \"{{.method}} {{.path}} {{.status}}\""
     - label: "7. Jump from a log line to its trace"

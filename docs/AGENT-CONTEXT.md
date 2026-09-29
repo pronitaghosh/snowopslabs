@@ -45,6 +45,7 @@ contradict themselves, or you are editing the code in question.
 | Write or change Go code | [Go conventions](GO-CONVENTIONS.md) | — |
 | Write tests | [TESTING.md](TESTING.md) | — |
 | Ship a release | [RELEASING.md](../RELEASING.md) | — |
+| Accept a branch for release on a live lab | [release acceptance](release-acceptance.md) | — |
 | Pick up deferred work | [backlog](backlog.md) | — |
 
 Everything else: [docs/README index in the root README](../README.md#documentation).
@@ -54,7 +55,7 @@ Everything else: [docs/README index in the root README](../README.md#documentati
 `.claude/skills/` holds packaged versions of the routes above, for harnesses
 that support them — `scenario-author`, `scenario-review`, `incident-author`,
 `incident-review`, `learning-author`, `learning-review`, `platform-component`,
-`api-change` and `docs-sync`. Each one
+`api-change`, `docs-sync` and `release-acceptance`. Each one
 names the documents to read, the rules that are easy to break, and a checklist
 to finish against.
 They are a shortcut to the docs, never a replacement: when a skill and a document
@@ -104,9 +105,9 @@ These hold everywhere. Breaking one is a review rejection, not a discussion.
 
 **Comments**
 
-- Explain *why*, not *what*. Three lines is a lot; ten is always wrong.
-- No task, ticket, wave or PR numbers in code comments. That history belongs in
-  git and in ADRs.
+- The comment rule in [CLAUDE.md](../CLAUDE.md#hard-rules) applies to Go,
+  shell, TypeScript and YAML alike: what the code does and why, never the
+  story behind a change.
 
 ---
 

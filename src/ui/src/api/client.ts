@@ -1,5 +1,6 @@
 import type {
   StatusResponse,
+  Capacity,
   AppInfo,
   AppDetail,
   PlatformProvidersMap,
@@ -39,6 +40,9 @@ const GET_TIMEOUT_MS = 15_000
 const POST_TIMEOUT_MS = 30_000
 /** Verify runs every check synchronously; the server bounds it at 5 min. */
 const VERIFY_TIMEOUT_MS = 5 * 60_000
+/** Incident status runs the fault's detection check, which may take its full
+ *  timeoutSeconds on a broken lab; the server bounds it at 2 min. */
+const INCIDENT_STATUS_TIMEOUT_MS = 2 * 60_000
 
 /** Generic fetch wrapper — throws Error with a useful message on every
  *  failure mode: network down, timeout, HTTP error body, malformed JSON. */
@@ -121,6 +125,7 @@ export const api = {
 
   // ── Status ──────────────────────────────────────────────────────────────
   getStatus:    ()           => req<StatusResponse>('/status'),
+  getCapacity:  ()           => req<Capacity>('/capacity'),
   getDashboards: ()          => req<DashboardURL[]>('/dashboards'),
   getJobs:      ()           => req<JobInfo[]>('/jobs'),
 
@@ -181,7 +186,7 @@ export const api = {
   // inject/resolve/hint are synchronous (not durable jobs): they return the
   // final state directly, so callers manage their own busy flags.
   listIncidents:      ()             => req<IncidentList>('/incidents'),
-  getIncidentStatus:  ()             => req<IncidentStatus>('/incidents/status'),
+  getIncidentStatus:  ()             => req<IncidentStatus>('/incidents/status', undefined, INCIDENT_STATUS_TIMEOUT_MS),
   getIncidentHistory: ()             => req<IncidentHistoryRecord[]>('/incidents/history'),
   injectIncident:     (name: string, app?: string) => req<{ status: string; silent: boolean; fault?: Fault }>(
     `/incidents/${enc(name)}/inject${app ? `?app=${enc(app)}` : ''}`, { method: 'POST' }, POST_TIMEOUT_MS),

@@ -24,12 +24,20 @@ import (
 // Keep the fields flat: Expand only matches a single name, so a nested
 // {{.Workload.Name}} would be left unexpanded.
 type Context struct {
-	// DomainSuffix is the ingress domain suffix, e.g. "k3d.local".
+	// DomainSuffix is the ingress domain suffix, e.g. "snowops.localhost". Use it for
+	// hostnames (an Ingress host, /etc/hosts); use IngressURLSuffix in URLs.
 	DomainSuffix string
+	// IngressURLSuffix is DomainSuffix plus the ingress port when it is not
+	// 80, e.g. "snowops.localhost:8080", so "http://grafana.{{.IngressURLSuffix}}"
+	// works whichever port the ingress listens on.
+	IngressURLSuffix string
 	// MonitoringNamespace is where the monitoring stack lives, e.g. "monitoring".
 	MonitoringNamespace string
 	// ProjectRoot is the absolute path to the repository/content root.
 	ProjectRoot string
+	// StateDir is the lab state directory, where scripts keep files that
+	// belong to the running lab rather than to the clone (e.g. backups).
+	StateDir string
 	// LokiRetentionPeriod is Loki's configured retention, e.g. "72h".
 	LokiRetentionPeriod string
 	// IngressClass is the ingress class name, e.g. "traefik".
@@ -74,8 +82,10 @@ func Since(start, now time.Time) string {
 func (c Context) Vars() map[string]string {
 	return map[string]string{
 		"DomainSuffix":        c.DomainSuffix,
+		"IngressURLSuffix":    c.IngressURLSuffix,
 		"MonitoringNamespace": c.MonitoringNamespace,
 		"ProjectRoot":         c.ProjectRoot,
+		"StateDir":            c.StateDir,
 		"LokiRetentionPeriod": c.LokiRetentionPeriod,
 		"IngressClass":        c.IngressClass,
 		"WorkloadName":        c.WorkloadName,
@@ -104,6 +114,10 @@ func FieldNames() []string {
 // expressions ({{ index .data "x" | base64decode }}).
 var varRef = regexp.MustCompile(`{{\s*\.(\w+)\s*}}`)
 
+// domainSuffixURL matches a URL whose host ends in {{.DomainSuffix}}. A URL
+// needs {{.IngressURLSuffix}}, which carries a non-default ingress port.
+var domainSuffixURL = regexp.MustCompile(`https?://(?:[A-Za-z0-9.-]|{{\s*\.\w+\s*}})*?{{\s*\.DomainSuffix\s*}}`)
+
 // Validate reports authoring mistakes in a templated content string.
 //
 // It matches placeholders the same way Expand does. Content files also hold
@@ -119,6 +133,10 @@ func Validate(input string, extra ...string) error {
 	known := Context{}.Vars()
 	for _, name := range extra {
 		known[name] = ""
+	}
+	if m := domainSuffixURL.FindString(input); m != "" {
+		return fmt.Errorf("URL %q is built from {{.DomainSuffix}}; use {{.IngressURLSuffix}} "+
+			"so it keeps the ingress port when the runtime could not use 80", m)
 	}
 	for _, m := range varRef.FindAllStringSubmatch(input, -1) {
 		name := m[1]

@@ -37,7 +37,7 @@ checks: [...]                         # machine-verifiable assertions
 explore:
   urls:
     - label: "My Dashboard"
-      url: "http://my-app.{{.DomainSuffix}}"
+      url: "http://my-app.{{.IngressURLSuffix}}"
   commands:
     - label: "Check status"
       command: "kubectl get pods -n my-ns"
@@ -179,7 +179,7 @@ checks:
 
   - name: grafana-reachable
     type: http
-    url: "http://grafana.{{.DomainSuffix}}"
+    url: "http://grafana.{{.IngressURLSuffix}}"
     expectStatus: 200                 # default 200
     bodyContains: "Grafana"           # optional
 
@@ -307,15 +307,51 @@ Prerequisites (workload capabilities), bound to "echo-server":
   - readiness-toggle       missing
 ```
 
+## Requirements
+
+`requirements` tells labctl what activating the scenario needs from the lab
+beyond what it already declares. Everything is optional.
+
+```yaml
+requirements:
+  memory: 300Mi     # memory for this scenario's own workloads
+  cpus: 4           # fewest Docker CPUs it runs well on
+  agents: 2         # agent nodes it needs
+  exclusive: true   # nothing else may be active alongside it
+```
+
+| Field | Meaning |
+|---|---|
+| `memory` | A Kubernetes quantity (`300Mi`, `1.5Gi`) for the workloads that belong to this scenario alone. Leave out the Helm releases it installs, the platform components it lists and its apps: those have measured footprints in `config/footprints.yaml` and are counted once however many active scenarios share them. |
+| `cpus` | Fewer Docker CPUs only warns; the scenario runs slowly. |
+| `agents` | k3d adds the missing agent nodes when the scenario starts, if memory allows, and removes them when it goes down and nothing active needs them. kind cannot add nodes to a running cluster, so the activation stops and asks for `AGENTS=<n>` and `labctl reset`. |
+| `exclusive` | For a drill that changes the cluster itself, such as replacing its nodes. Nothing else may be active while it is, and it cannot start while anything else is. |
+
+Before a scenario (or a fault, which takes the same `requirements` in
+`fault.yaml`) starts, labctl estimates the lab's memory two ways and uses the
+larger: the baseline plus the footprints of everything active and the new
+scenario, and the lab's current usage plus whatever the new scenario would
+start that is not already running. If that exceeds 85% of Docker's memory the
+activation is blocked. The message lists which active scenarios to bring down
+to make room and how large to make Docker instead, with the resize command for
+colima, Docker Desktop, WSL or native Linux. Too few CPUs, and two active
+scenarios bound to the same app, only warn.
+
+`scripts/measure-footprints.sh` measures what each scenario adds on a real lab;
+use it to set `memory` for a new scenario and to update
+`config/footprints.yaml`.
+
 ## Template variables
 
 URLs, commands, namespaces, snippets and manifests are Go templates.
 
 | Variable | Example | Meaning |
 |---|---|---|
-| `{{.DomainSuffix}}` | `k3d.local` | Ingress domain suffix from the active runtime |
+| `{{.DomainSuffix}}` | `snowops.localhost` | Ingress domain suffix from the active runtime. Use it for **hostnames** (an Ingress `host:`), never in a URL. |
+| `{{.IngressURLSuffix}}` | `snowops.localhost` or `snowops.localhost:8080` | The domain suffix plus the ingress port when it is not 80 (the runtime falls back when 80 is busy). Build every **URL** from it: `http://grafana.{{.IngressURLSuffix}}`. `labctl validate` rejects a URL built from `{{.DomainSuffix}}`. |
 | `{{.MonitoringNamespace}}` | `monitoring` | Where the monitoring stack lives |
-| `{{.ProjectRoot}}` | `/path/to/project` | Absolute path to the content root |
+| `{{.ProjectRoot}}` | `/home/me/snowopslabs` | Absolute path to the learner's clone. Commands a learner copies (hints, explore commands, remediations) name repo files through it, so they work from any directory. |
+| `{{.StateDir}}` | `/home/me/.snowops/state/snowops` | The lab state directory, for files that belong to the running lab rather than the clone (e.g. backup archives). Scripts get it as `LAB_STATE_DIR`. |
 | `{{.LokiRetentionPeriod}}` | `72h` | Loki's configured retention |
 | `{{.IngressClass}}` | `traefik` | Ingress class for scenario Ingress manifests |
 | `{{.WorkloadName}}` | `go-api` | The bound app's name, and its Deployment name |
@@ -389,6 +425,21 @@ script, check script and fault script run by the engine is given:
 | `WORKLOAD_NAMESPACE` | `go-api` |
 | `WORKLOAD_PORT` | `8080` |
 | `WORKLOAD_METRIC` | `http_server_request_duration_seconds` |
+| `PROJECT_ROOT` | `/home/me/snowopslabs` (the clone) |
+| `LAB_STATE_DIR` | `/home/me/.snowops/state/snowops` |
+
+Check scripts also get the lab's ingress: `DOMAIN_SUFFIX`, `INGRESS_URL_SUFFIX`,
+`HTTP_PORT`, `HTTPS_PORT`, and `PROMETHEUS_URL`, `GRAFANA_URL` and
+`ALERTMANAGER_URL`. curl and browsers resolve a `*.localhost` host to this
+machine themselves; other tools (openssl, dig, a language runtime) ask the
+system resolver, which often cannot. Such a script connects to `127.0.0.1` and
+names the host separately, as `openssl s_client -servername` does.
+
+A script that prints a command for the learner names repo files through
+`$PROJECT_ROOT`, and one that keeps files for the running lab puts them under
+`$LAB_STATE_DIR`. By hand neither is set, so fall back to the script's own
+location and to labctl's default:
+`${LAB_STATE_DIR:-${SNOWOPS_HOME:-$HOME/.snowops}/state/${CLUSTER_NAME:-snowops}}`.
 
 A learner also runs scripts by hand, from a terminal that has none of these. So
 a scenario script sources the shared helper first, which takes the binding from
@@ -573,6 +624,9 @@ Enforced at load time — an invalid scenario refuses to load, and CI fails on i
 - Asset paths stay inside the scenario directory; absolute paths and `..`
   traversal are rejected.
 - Template variables must be known.
+- A URL is built from `{{.IngressURLSuffix}}`, never `{{.DomainSuffix}}`.
+- `requirements.memory` is a quantity such as `300Mi`; `cpus` and `agents`
+  are not negative.
 - A `path` on a snippet or component must resolve.
 - A command that calls a workload-bound script passes `--app`.
 - A command never runs `kubectl apply|create|replace|delete -f` on a templated

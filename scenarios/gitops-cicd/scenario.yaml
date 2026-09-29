@@ -11,6 +11,10 @@ prerequisites:
     - monitoring/metrics
     - monitoring/grafana
   apps: []
+# Memory for this scenario's own workloads; shared releases, platform
+# components and apps are counted from config/footprints.yaml.
+requirements:
+  memory: 400Mi
 runtimes:
   - k3d
   - kind
@@ -167,9 +171,9 @@ snippets:
 explore:
   urls:
     - label: "ArgoCD Dashboard"
-      url: "http://argocd.{{.DomainSuffix}}"
+      url: "http://argocd.{{.IngressURLSuffix}}"
     - label: "Grafana — GitOps Delivery (sync and health over time)"
-      url: "http://grafana.{{.DomainSuffix}}/d/gitops-delivery"
+      url: "http://grafana.{{.IngressURLSuffix}}/d/gitops-delivery"
   commands:
     - label: "Get the ArgoCD admin password"
       command: "kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d; echo"

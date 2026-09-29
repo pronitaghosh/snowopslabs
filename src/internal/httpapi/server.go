@@ -35,6 +35,7 @@ import (
 	"github.com/sagar2395/snowopslabs/internal/scenario"
 	"github.com/sagar2395/snowopslabs/internal/services"
 	"github.com/sagar2395/snowopslabs/internal/store"
+	"github.com/sagar2395/snowopslabs/internal/toolchain"
 )
 
 // Server is the API server that backs the web UI.
@@ -46,11 +47,13 @@ type Server struct {
 	incidents *incident.Engine
 	svcs      *services.Registry
 	runtimes  *runtime.Manager
-	router    *mux.Router
-	upgrader  websocket.Upgrader
-	uiFS      fs.FS
-	uiDir     string
-	uiSource  string
+	// docker runs the docker CLI for the capacity report.
+	docker   toolchain.Runner
+	router   *mux.Router
+	upgrader websocket.Upgrader
+	uiFS     fs.FS
+	uiDir    string
+	uiSource string
 
 	// runStore is the durable run store the run console reads.
 	runStore *store.Store
@@ -101,6 +104,7 @@ func NewServer(cfg *config.Config, exec *executor.Executor, registry *platform.R
 		incidents: incidents,
 		svcs:      svcs,
 		runtimes:  rtm,
+		docker:    toolchain.NewExec(),
 		upgrader: websocket.Upgrader{
 			CheckOrigin: originAllowed,
 		},
@@ -128,7 +132,7 @@ func NewServer(cfg *config.Config, exec *executor.Executor, registry *platform.R
 		s.loginLimit = newLoginLimiter(loginMaxAttempts, loginWindow)
 		// An unreadable users file leaves an empty store; the server logs a
 		// warning at start and keeps running.
-		if store, err := auth.LoadStore(auth.DefaultUsersPath(cfg.ProjectRoot)); err == nil {
+		if store, err := auth.LoadStore(auth.DefaultUsersPath(cfg.StateDir)); err == nil {
 			s.users = store
 		} else {
 			s.users = auth.NewStore()
@@ -137,7 +141,7 @@ func NewServer(cfg *config.Config, exec *executor.Executor, registry *platform.R
 		switch {
 		case s.userLoadErr != nil:
 			slog.Warn("auth enabled but users file failed to load; nobody can log in",
-				"error", s.userLoadErr, "path", auth.DefaultUsersPath(cfg.ProjectRoot))
+				"error", s.userLoadErr, "path", auth.DefaultUsersPath(cfg.StateDir))
 		case s.users.Count() == 0:
 			slog.Warn("auth enabled but no users defined; add one with 'labctl users add <name> --role operator'")
 		default:
@@ -220,7 +224,7 @@ func (s *Server) resolveUIFS() http.FileSystem {
 	if s.uiFS != nil {
 		if _, err := fs.Stat(s.uiFS, "index.html"); err == nil {
 			fsys := http.FS(s.uiFS)
-			s.uiSource = fmt.Sprintf("embedded UI [%s] — rebuild with `make cli-build` to update", uiBundleName(fsys))
+			s.uiSource = fmt.Sprintf("embedded UI [%s]", uiBundleName(fsys))
 			return fsys
 		}
 	}
@@ -235,7 +239,7 @@ func (s *Server) resolveUIFS() http.FileSystem {
 		}
 	}
 	fallback := filepath.Join(s.cfg.ProjectRoot, "src", "ui", "dist")
-	s.uiSource = "UI not found (no embedded bundle and no built dist) — run `make ui`"
+	s.uiSource = "UI not found: this labctl was built without it. Install a release build, or build from source with `make cli-build`"
 	return http.Dir(fallback)
 }
 
@@ -314,6 +318,7 @@ func (s *Server) registerAPI(api *mux.Router) {
 	api.HandleFunc("/auth/logout", s.handleAuthLogout).Methods("POST", "OPTIONS")
 
 	api.HandleFunc("/status", s.handleStatus).Methods("GET", "OPTIONS")
+	api.HandleFunc("/capacity", s.handleCapacity).Methods("GET", "OPTIONS")
 	api.HandleFunc("/jobs", s.handleJobs).Methods("GET", "OPTIONS")
 	api.HandleFunc("/apps", s.handleListApps).Methods("GET", "OPTIONS")
 	api.HandleFunc("/apps/{name}/detail", s.handleAppDetail).Methods("GET", "OPTIONS")
@@ -377,6 +382,45 @@ func (s *Server) registerAPI(api *mux.Router) {
 
 	api.HandleFunc("/ws", s.handleWebSocket)
 	api.HandleFunc("/stream", s.handleStreamSSE).Methods("GET", "OPTIONS")
+
+	// Without this, a request no route serves falls through to the SPA and
+	// answers HTML with a 200.
+	unmatched := s.unmatchedAPI(api)
+	api.NotFoundHandler = unmatched
+	api.MethodNotAllowedHandler = unmatched
+}
+
+// unmatchedAPI answers an /api/v2 request that no route serves with a
+// problem+json error: 405 when the path serves other methods, else 404. mux
+// skips route middleware for these requests, so it applies the request ID,
+// access log and CORS middleware itself.
+func (s *Server) unmatchedAPI(api *mux.Router) http.Handler {
+	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if pathServesOtherMethod(api, r) {
+			respondError(w, r, http.StatusMethodNotAllowed, "method_not_allowed", "this /api/v2 route does not accept "+r.Method)
+			return
+		}
+		respondError(w, r, http.StatusNotFound, "not_found", "no /api/v2 route matches this path")
+	})
+	return s.requestIDMiddleware(s.accessLogMiddleware(corsMiddleware(h)))
+}
+
+// pathServesOtherMethod reports whether a route in api matches r's path under
+// another method. It asks each route directly, because mux loses a method
+// mismatch once later routes have been tried.
+func pathServesOtherMethod(api *mux.Router, r *http.Request) bool {
+	for _, method := range []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete} {
+		if method == r.Method {
+			continue
+		}
+		probe := r.Clone(r.Context())
+		probe.Method = method
+		var match mux.RouteMatch
+		if api.Match(probe, &match) && match.MatchErr == nil {
+			return true
+		}
+	}
+	return false
 }
 
 func originAllowed(r *http.Request) bool {

@@ -4,7 +4,7 @@ set -euo pipefail
 
 BASELINE_TAG="v1.0.0"
 APP="${WORKLOAD_NAME}"
-STATE_DIR="${PROJECT_ROOT:-.}/.labctl/env-promotion"
+STATE_DIR="${LAB_STATE_DIR:-${SNOWOPS_HOME:-$HOME/.snowops}/state/${CLUSTER_NAME:-snowops}}/env-promotion"
 STATE="${STATE_DIR}/pre-existing-tags"
 
 # Record the versioned tags that already existed, so teardown removes only the

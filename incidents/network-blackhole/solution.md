@@ -13,7 +13,7 @@ there is nothing to log.
 ## Diagnosis path
 
 ```bash
-curl -v http://{{.WorkloadName}}.{{.DomainSuffix}}/health            # times out / 5xx from traefik
+curl -v http://{{.WorkloadName}}.{{.IngressURLSuffix}}/health            # times out / 5xx from traefik
 kubectl get pods -n {{.WorkloadNamespace}}                        # all Running, Ready
 kubectl get endpoints {{.WorkloadName}} -n {{.WorkloadNamespace}}            # endpoints populated — Service is fine
 kubectl port-forward -n {{.WorkloadNamespace}} deploy/{{.WorkloadName}} 8080:8080 &

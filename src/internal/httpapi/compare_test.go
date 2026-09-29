@@ -18,12 +18,12 @@ import (
 
 func newCompareServer(t *testing.T) *Server {
 	t.Helper()
-	return &Server{cfg: &config.Config{ProjectRoot: t.TempDir(), DomainSuffix: "k3d.local"}}
+	return &Server{cfg: &config.Config{ProjectRoot: t.TempDir(), StateDir: t.TempDir(), DomainSuffix: "k3d.local"}}
 }
 
-func writeComparison(t *testing.T, root string) string {
+func writeComparison(t *testing.T, stateDir string) string {
 	t.Helper()
-	dir := filepath.Join(root, ".labctl", "history")
+	dir := filepath.Join(stateDir, "history")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -45,7 +45,7 @@ func writeComparison(t *testing.T, root string) string {
 
 func TestListComparisonsCarriesTheMetricSet(t *testing.T) {
 	s := newCompareServer(t)
-	writeComparison(t, s.cfg.ProjectRoot)
+	writeComparison(t, s.cfg.StateDir)
 
 	rr := httptest.NewRecorder()
 	s.handleListComparisons(rr, httptest.NewRequest(http.MethodGet, "/api/v2/comparisons", nil))
@@ -90,7 +90,7 @@ func TestListComparisonsCarriesTheMetricSet(t *testing.T) {
 
 func TestGetComparisonByID(t *testing.T) {
 	s := newCompareServer(t)
-	id := writeComparison(t, s.cfg.ProjectRoot)
+	id := writeComparison(t, s.cfg.StateDir)
 
 	rr := httptest.NewRecorder()
 	req := mux.SetURLVars(httptest.NewRequest(http.MethodGet, "/api/v2/comparisons/"+id, nil), map[string]string{"id": id})

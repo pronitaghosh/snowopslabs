@@ -78,76 +78,80 @@ func ensureAppsDeployed(ctx context.Context, apps []string, autoDeploy bool) err
 	return errors.New(strings.TrimRight(b.String(), "\n"))
 }
 
-// warnMissingPlatformPrereqs writes a warning to w for each platform
-// prerequisite (such as "cost/opencost" or "ingress") that does not appear to
-// be installed, with the command to install it. It only warns, because it
-// judges by namespace existence, which is not always right.
-func warnMissingPlatformPrereqs(ctx context.Context, w io.Writer, prereqs []string) {
-	if len(prereqs) == 0 {
-		return
-	}
-	reg := platform.NewRegistry(cfg.ProjectRoot)
-
-	var missing []string
+// ensurePlatformPrereqs checks that every platform prerequisite (such as
+// "cost/opencost", "ingress" or "mesh") is installed. With autoInstall it
+// installs the missing ones; otherwise it returns an error with the command
+// that installs each. Prerequisites the registry does not know are skipped:
+// scenario preflight already reports those.
+func ensurePlatformPrereqs(ctx context.Context, out io.Writer, prereqs []string, autoInstall bool) error {
+	missing := []string{}
 	for _, pre := range prereqs {
-		namespaces := prereqNamespaces(reg, pre)
-		if len(namespaces) == 0 {
-			// Unknown to the registry; skip it rather than guess.
+		installed, known := platformPrereqInstalled(ctx, pre)
+		if !known || installed {
 			continue
 		}
-		present := false
-		for _, ns := range namespaces {
-			if k8s.NamespaceExists(ctx, ns) {
-				present = true
-				break
-			}
-		}
-		if !present {
+		if !autoInstall {
 			missing = append(missing, pre)
+			continue
+		}
+		category, provider, err := resolveTarget(pre)
+		if err != nil {
+			return fmt.Errorf("resolving platform prerequisite %s: %w", pre, err)
+		}
+		fmt.Fprintf(out, "Platform prerequisite %s is not installed — installing %s/%s...\n", pre, category, provider)
+		if err := reg.Install(category, provider, scriptExec); err != nil {
+			return fmt.Errorf("installing platform prerequisite %s: %w", pre, err)
 		}
 	}
 	if len(missing) == 0 {
-		return
+		return nil
 	}
-
-	fmt.Fprintf(w, "Warning: platform prerequisite(s) not detected: %s\n", strings.Join(missing, ", "))
-	fmt.Fprintln(w, "Some checks will fail until they are installed. Install them with:")
+	var b strings.Builder
+	fmt.Fprintf(&b, "platform prerequisite(s) not installed: %s\nInstall them with:\n", strings.Join(missing, ", "))
 	for _, pre := range missing {
-		fmt.Fprintf(w, "  labctl platform up %s\n", pre)
+		fmt.Fprintf(&b, "  labctl platform up %s\n", pre)
 	}
+	b.WriteString("or re-run with --deploy-prereqs to install them first")
+	return errors.New(b.String())
 }
 
-// prereqNamespaces resolves a platform-prerequisite string to the namespace(s)
-// whose existence signals it is installed. A prereq is one of:
-//   - a (sub)category with providers under it (e.g. "monitoring/metrics") → the
-//     namespace each of its providers installs into;
-//   - a category/provider pair (e.g. "cost/opencost") → that provider's namespace;
-//   - a bare category with providers (e.g. "ingress") → each provider's namespace
-//     (any one present counts, since ingress providers are mutually exclusive).
+// platformPrereqInstalled reports whether any provider a prerequisite names
+// is installed; known is false when the registry does not know it.
+func platformPrereqInstalled(ctx context.Context, pre string) (installed, known bool) {
+	providers := prereqProviders(reg, pre)
+	for i := range providers {
+		if providerInstalled(ctx, &providers[i]) {
+			return true, true
+		}
+	}
+	return false, len(providers) > 0
+}
+
+// prereqProviders resolves a platform prerequisite to the providers that
+// satisfy it:
+//   - a (sub)category such as "ingress" or "monitoring/metrics" → any of its
+//     providers;
+//   - a category/provider pair such as "cost/opencost" → that provider.
 //
-// It returns nil when the registry does not know the prereq.
-func prereqNamespaces(reg *platform.Registry, pre string) []string {
+// It returns nil when the registry does not know the prerequisite.
+func prereqProviders(reg *platform.Registry, pre string) []platform.Provider {
 	if provs := reg.GetProviders(pre); len(provs) > 0 {
-		return providerNamespaces(provs)
+		return provs
 	}
 	if i := strings.LastIndex(pre, "/"); i >= 0 {
 		if p, err := reg.GetProvider(pre[:i], pre[i+1:]); err == nil {
-			return []string{p.Namespace()}
+			return []platform.Provider{*p}
 		}
 	}
 	return nil
 }
 
-// providerNamespaces returns the deduplicated namespaces of the given providers.
-func providerNamespaces(provs []platform.Provider) []string {
-	seen := map[string]bool{}
-	var out []string
-	for i := range provs {
-		ns := provs[i].Namespace()
-		if ns != "" && !seen[ns] {
-			seen[ns] = true
-			out = append(out, ns)
-		}
+// providerInstalled reports whether a platform provider is installed: by its
+// Helm release when it shares a namespace with other components, otherwise by
+// its namespace.
+func providerInstalled(ctx context.Context, p *platform.Provider) bool {
+	if p.SharesNamespace() {
+		return k8s.HelmReleaseExists(ctx, p.Namespace(), p.Name)
 	}
-	return out
+	return k8s.NamespaceExists(ctx, p.Namespace())
 }

@@ -11,6 +11,10 @@ prerequisites:
     - ingress
   apps:
     - "{{.WorkloadName}}"
+# Memory for this scenario's own workloads; shared releases, platform
+# components and apps are counted from config/footprints.yaml.
+requirements:
+  memory: 100Mi
 runtimes:
   - k3d
   - kind
@@ -115,7 +119,7 @@ checks:
 
   - name: health-check-passes
     type: http
-    url: "http://{{.WorkloadName}}.{{.DomainSuffix}}/health"
+    url: "http://{{.WorkloadName}}.{{.IngressURLSuffix}}/health"
     expectStatus: 200
     remediation: "{{.WorkloadName}} is not serving. If you have just cut its requests or limits, you may have gone below what it needs — check for restarts and OOMKills: kubectl -n {{.WorkloadNamespace}} get pods && kubectl -n {{.WorkloadNamespace}} describe deploy {{.WorkloadName}}"
 
@@ -141,16 +145,12 @@ snippets:
 explore:
   urls:
     - label: "OpenCost UI — per-namespace cost breakdown (via ingress)"
-      url: "http://opencost.{{.DomainSuffix}}"
+      url: "http://opencost.{{.IngressURLSuffix}}"
     - label: "Grafana — requests vs usage, efficiency, cost and throttling (start here)"
-      url: "http://grafana.{{.DomainSuffix}}/d/cost-right-sizing"
+      url: "http://grafana.{{.IngressURLSuffix}}/d/cost-right-sizing"
     - label: "Grafana — platform pod-resources dashboard"
-      url: "http://grafana.{{.DomainSuffix}}/d/pod-resources"
+      url: "http://grafana.{{.IngressURLSuffix}}/d/pod-resources"
   commands:
-    - label: "0. Add the ingress DNS entries once (opencost.{{.DomainSuffix}} etc.) to /etc/hosts, then open http://opencost.{{.DomainSuffix}}"
-      command: "labctl hosts add"
-    - label: "0b. FALLBACK only if you haven't run 'labctl hosts add' — port-forward the UI instead, then open http://localhost:9090"
-      command: "kubectl -n opencost port-forward svc/opencost 9090 &"
     - label: "1a. Drive steady traffic so 'healthy under load' is actually exercised (also warms the ingress route)"
       command: "labctl traffic start --app {{.WorkloadName}} --profile steady --rps 10"
     - label: "1b. Confirm the inflated state — checks fail while over-provisioned"
@@ -163,14 +163,12 @@ explore:
       command: "kubectl -n {{.WorkloadNamespace}} rollout status deployment {{.WorkloadName}}"
     - label: "4. Verify the right-sized state — all checks pass"
       command: "labctl scenario verify cost-right-sizing"
-    - label: "5. Observe the cost difference in OpenCost at http://opencost.{{.DomainSuffix}} (wait ~1 min for a new data point). No ingress DNS entry yet? Fall back to the port-forward below."
-      command: "kubectl -n opencost port-forward svc/opencost 9090 &"
     - label: "Inspect the current CPU request"
       command: "kubectl -n {{.WorkloadNamespace}} get deploy {{.WorkloadName}} -o jsonpath='{.spec.template.spec.containers[0].resources}'"
-    - label: "6. Stop the load generator when you're done"
+    - label: "5. Stop the load generator when you're done"
       command: "labctl traffic stop"
   tips:
-    - "OpenCost is exposed via ingress at http://opencost.{{.DomainSuffix}}. Run 'sudo labctl hosts add' once to add opencost.{{.DomainSuffix}} (and the other lab hostnames) to /etc/hosts — it manages a block between '# BEGIN snowops-labs' and '# END snowops-labs' and re-execs itself with sudo since /etc/hosts is root-owned. If you'd rather not touch /etc/hosts, use the port-forward fallback (command 0b) and browse http://localhost:9090 instead."
+    - "OpenCost is at http://opencost.{{.IngressURLSuffix}} (in the links above). After you right-size, it takes about a minute to show a new data point with the lower cost."
     - "Generate load first (step 1a, or the UI 'Traffic' tab → start the 'steady' profile). It exercises the 'healthy under steady traffic' objective and makes {{.WorkloadName}}'s real usage visible in Grafana/OpenCost — the low-usage-vs-high-request gap is the whole point."
     - "The first request through the ingress after a rollout can take a few seconds (cold Traefik route + pod warm-up) — the health check is not hung. Running traffic keeps the route warm."
     - "Grafana → the linked Pod Resources dashboard: compare the flat 'requests' line against the much lower 'usage' line — that gap is the waste. After right-sizing, requests should drop toward actual usage."

@@ -23,11 +23,20 @@ type Config struct {
 	// Project root directory
 	ProjectRoot string
 
+	// StateDir holds the lab state of this cluster; see StateDir.
+	StateDir string
+
 	// Cluster/Runtime
 	Profile     string
 	ClusterName string
 	HTTPPort    string
 	HTTPSPort   string
+	// LabCPUs and LabMemory size the Docker VM labctl starts (colima). They
+	// never shrink one the user already runs.
+	LabCPUs   string
+	LabMemory string
+	// Agents is the number of agent nodes the cluster starts with.
+	Agents string
 
 	// Runtime-specific
 	IngressClass        string
@@ -35,6 +44,10 @@ type Config struct {
 	DomainSuffix        string
 	RegistryType        string
 	MonitoringNamespace string
+
+	// DomainSuffixPinned reports that the user set DOMAIN_SUFFIX in the
+	// environment or .env, so labctl never moves the lab to another suffix.
+	DomainSuffixPinned bool
 
 	// Provider selections
 	IngressProvider     string
@@ -93,12 +106,9 @@ func (a *AppConfig) Workload() workload.Workload {
 // than once or concurrently. For every key the first non-empty value wins, in
 // this order: real environment variable, .env, runtime.env, built-in default.
 func Load(projectRoot string) (*Config, error) {
-	if projectRoot == "" {
-		var err error
-		projectRoot, err = findProjectRoot()
-		if err != nil {
-			return nil, err
-		}
+	projectRoot, err := FindLab(projectRoot)
+	if err != nil {
+		return nil, err
 	}
 
 	cfg := &Config{
@@ -109,6 +119,7 @@ func Load(projectRoot string) (*Config, error) {
 	// wins over runtime.env.
 	fileVals := map[string]string{}
 	mergeEnvFile(fileVals, filepath.Join(projectRoot, ".env"))
+	cfg.DomainSuffixPinned = resolveEnv(fileVals, "DOMAIN_SUFFIX", "") != ""
 
 	// The profile selects which runtime.env to load and may itself be set in
 	// .env or the real environment.
@@ -124,12 +135,37 @@ func Load(projectRoot string) (*Config, error) {
 
 	cfg.Profile = profile
 	cfg.ClusterName = resolveEnv(fileVals, "CLUSTER_NAME", "snowops")
+	stateDir, err := StateDir(cfg.ClusterName)
+	if err != nil {
+		return nil, fmt.Errorf("locating the lab state directory: %w", err)
+	}
+	cfg.StateDir = stateDir
+
+	// The runtime records how this machine reaches the cluster's ingress: the
+	// ports it bound, which differ from the configured ones when those are
+	// busy, and the domain suffix its hostnames use, which a lab keeps for its
+	// lifetime. The record overrides .env; only a real environment variable
+	// overrides the record.
+	clusterVals := map[string]string{}
+	if path, err := ClusterStateFile(cfg.ClusterName); err == nil {
+		mergeEnvFile(clusterVals, path)
+	}
+	for _, k := range []string{"HTTP_PORT", "HTTPS_PORT", "DOMAIN_SUFFIX"} {
+		if v := clusterVals[k]; v != "" {
+			fileVals[k] = v
+		}
+	}
 	cfg.HTTPPort = resolveEnv(fileVals, "HTTP_PORT", "80")
 	cfg.HTTPSPort = resolveEnv(fileVals, "HTTPS_PORT", "443")
+	cfg.LabCPUs = resolveEnv(fileVals, "LAB_CPUS", "2")
+	cfg.LabMemory = resolveEnv(fileVals, "LAB_MEMORY", "4")
+	cfg.Agents = resolveEnv(fileVals, "AGENTS", "1")
 
 	cfg.IngressClass = resolveEnv(fileVals, "INGRESS_CLASS", "traefik")
 	cfg.StorageClass = resolveEnv(fileVals, "STORAGE_CLASS", "local-path")
-	cfg.DomainSuffix = resolveEnv(fileVals, "DOMAIN_SUFFIX", "k3d.local")
+	// Every browser resolves *.localhost to this machine, and the cluster name
+	// keeps two labs' hostnames (and so their cookies) apart.
+	cfg.DomainSuffix = resolveEnv(fileVals, "DOMAIN_SUFFIX", cfg.ClusterName+".localhost")
 	cfg.RegistryType = resolveEnv(fileVals, "REGISTRY_TYPE", "k3d-import")
 	cfg.MonitoringNamespace = resolveEnv(fileVals, "MONITORING_NAMESPACE", "monitoring")
 
@@ -225,27 +261,130 @@ func ListApps(projectRoot string) ([]string, error) {
 	return apps, nil
 }
 
+// ErrNoLab means no lab was found: the working directory is not inside a
+// clone, SNOWOPS_LAB_DIR is unset and install.sh has recorded none.
+var ErrNoLab = errors.New("could not find your lab (a snowopslabs clone, with scenarios/ and runtimes/).\n" +
+	"Clone it and run its installer, which also lets labctl find it from any directory:\n" +
+	"  git clone --branch stable https://github.com/sagar2395/snowopslabs.git\n" +
+	"  cd snowopslabs && ./install.sh\n" +
+	"Or run labctl inside a clone, set SNOWOPS_LAB_DIR=<clone>, or pass --project-dir <clone>")
+
+// FindLab returns projectDir when it is set, and otherwise locates the lab as
+// findProjectRoot does.
+func FindLab(projectDir string) (string, error) {
+	if projectDir != "" {
+		return projectDir, nil
+	}
+	return findProjectRoot()
+}
+
+// findProjectRoot locates the lab: the nearest clone at or above the working
+// directory, else SNOWOPS_LAB_DIR, else the clone install.sh recorded in
+// <Home>/lab-dir. --project-dir overrides all three.
 func findProjectRoot() (string, error) {
 	dir, err := os.Getwd()
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("reading the working directory: %w", err)
 	}
-
-	// The project root is the nearest directory with both scenarios/ and
-	// runtimes/. Keying on content rather than a Makefile also finds a checkout
-	// used with a downloaded binary. --project-dir overrides this search.
 	for {
-		if _, err := os.Stat(filepath.Join(dir, "scenarios")); err == nil {
-			if _, err := os.Stat(filepath.Join(dir, "runtimes")); err == nil {
-				return dir, nil
-			}
+		if isContentRoot(dir) {
+			return dir, nil
 		}
 		parent := filepath.Dir(dir)
 		if parent == dir {
-			return "", errors.New("could not find project root (looked for scenarios/ + runtimes/)")
+			break
 		}
 		dir = parent
 	}
+	if env := os.Getenv("SNOWOPS_LAB_DIR"); env != "" {
+		if !isContentRoot(env) {
+			return "", fmt.Errorf("SNOWOPS_LAB_DIR=%s is not a snowopslabs clone (it has no scenarios/ and runtimes/); point it at your clone or unset it", env)
+		}
+		return env, nil
+	}
+	return recordedLab()
+}
+
+// recordedLab is the clone install.sh last recorded in <Home>/lab-dir.
+func recordedLab() (string, error) {
+	file, err := LabDirFile()
+	if err != nil {
+		return "", ErrNoLab
+	}
+	data, err := os.ReadFile(file) //nolint:gosec // file is labctl's own record under <Home>
+	if err != nil {
+		return "", ErrNoLab
+	}
+	dir := strings.TrimSpace(string(data))
+	if !isContentRoot(dir) {
+		return "", fmt.Errorf("the lab recorded in %s (%s) is gone.\n"+
+			"cd into your snowopslabs clone and run ./install.sh to record it again", file, dir)
+	}
+	return dir, nil
+}
+
+// isContentRoot reports whether dir holds the lab content.
+func isContentRoot(dir string) bool {
+	for _, sub := range []string{"scenarios", "runtimes"} {
+		//nolint:gosec // dir is the user's own lab location (working directory, SNOWOPS_LAB_DIR or their record)
+		if info, err := os.Stat(filepath.Join(dir, sub)); err != nil || !info.IsDir() {
+			return false
+		}
+	}
+	return true
+}
+
+// LabDirFile is where install.sh records the clone labctl uses when run
+// outside one: <Home>/lab-dir.
+func LabDirFile() (string, error) {
+	home, err := Home()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, "lab-dir"), nil
+}
+
+// LabVersion is the release the lab at root belongs to, from its committed
+// LAB_VERSION file, or "" when the file is missing.
+func LabVersion(root string) string {
+	data, err := os.ReadFile(filepath.Join(root, "LAB_VERSION")) //nolint:gosec // root is the resolved lab directory
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(data))
+}
+
+// StateDir is where labctl keeps the lab state of one cluster (active
+// scenarios and faults, platform intent, history, progress, snapshots):
+// <Home>/state/<cluster>. It sits outside the clone, so every clone on the
+// machine sees the same state for the one cluster, and re-cloning loses none.
+func StateDir(cluster string) (string, error) {
+	home, err := Home()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, "state", cluster), nil
+}
+
+// MigrateState moves lab state from legacy (a clone's .labctl directory) to
+// target once, and reports whether it moved anything. When both exist it
+// moves nothing and returns an error naming them, so the user can merge.
+func MigrateState(legacy, target string) (bool, error) {
+	if _, err := os.Stat(legacy); err != nil {
+		return false, nil //nolint:nilerr // no legacy state is the usual case
+	}
+	if _, err := os.Stat(target); err == nil {
+		return false, fmt.Errorf("lab state is in both %s and %s; labctl uses %s, so merge what you need from %s and delete it",
+			legacy, target, target, legacy)
+	}
+	if err := os.MkdirAll(filepath.Dir(target), 0o750); err != nil {
+		return false, fmt.Errorf("creating %s: %w", filepath.Dir(target), err)
+	}
+	if err := os.Rename(legacy, target); err != nil {
+		return false, fmt.Errorf("moving lab state from %s to %s: %w; move it by hand: mv %s %s",
+			legacy, target, err, legacy, target)
+	}
+	return true, nil
 }
 
 // mergeEnvFile parses a KEY=VALUE file into dst. Keys already in dst are kept,
@@ -317,6 +456,54 @@ func resolveEnv(fileVals map[string]string, key, defaultVal string) string {
 	return defaultVal
 }
 
+// Home is labctl's own state directory: $SNOWOPS_HOME, or ~/.snowops.
+func Home() (string, error) {
+	if home := os.Getenv("SNOWOPS_HOME"); home != "" {
+		return home, nil
+	}
+	dir, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("locating home directory (set SNOWOPS_HOME to override): %w", err)
+	}
+	return filepath.Join(dir, ".snowops"), nil
+}
+
+// ClusterStateFile is where a local runtime records what it created for a
+// cluster, such as the ingress ports it bound: <Home>/clusters/<name>.env.
+// runtimes/_lib/docker.sh writes it and the runtime's down.sh removes it.
+func ClusterStateFile(clusterName string) (string, error) {
+	home, err := Home()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, "clusters", clusterName+".env"), nil
+}
+
+// ResolvesLocally reports whether lab hostnames resolve to this machine without
+// hosts-file entries: every browser and resolver maps *.localhost to loopback.
+func (c *Config) ResolvesLocally() bool {
+	return c.DomainSuffix == "localhost" || strings.HasSuffix(c.DomainSuffix, ".localhost")
+}
+
+// LocalIngress reports whether lab hostnames are served on this machine's
+// loopback (k3d, kind) rather than by a real ingress (incluster).
+func (c *Config) LocalIngress() bool { return c.Profile != "incluster" }
+
+// IngressURLSuffix is what follows "<name>." in a lab URL: the domain suffix,
+// plus the ingress port when it is not 80 (e.g. "snowops.localhost:8080").
+func (c *Config) IngressURLSuffix() string {
+	if c.HTTPPort == "" || c.HTTPPort == "80" {
+		return c.DomainSuffix
+	}
+	return c.DomainSuffix + ":" + c.HTTPPort
+}
+
+// IngressURL is the browser URL for a lab hostname, e.g. "grafana" →
+// "http://grafana.snowops.localhost" or "http://grafana.snowops.localhost:8080".
+func (c *Config) IngressURL(name string) string {
+	return "http://" + name + "." + c.IngressURLSuffix()
+}
+
 // availableProfiles lists valid profile directory names under runtimes/.
 func availableProfiles(projectRoot string) string {
 	entries, err := os.ReadDir(filepath.Join(projectRoot, "runtimes"))
@@ -325,7 +512,8 @@ func availableProfiles(projectRoot string) string {
 	}
 	var names []string
 	for _, e := range entries {
-		if e.IsDir() {
+		// runtimes/_lib holds shared helpers, not a profile.
+		if e.IsDir() && !strings.HasPrefix(e.Name(), "_") {
 			names = append(names, e.Name())
 		}
 	}

@@ -5,6 +5,11 @@ set -euo pipefail
 
 CLUSTER_NAME="${1:-${CLUSTER_NAME:-snowops}}"
 
+# shellcheck source=../_lib/docker.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/_lib/docker.sh"
+# The cluster's recorded ports go with it, whether or not it still exists.
+forget_cluster "$CLUSTER_NAME"
+
 if ! command -v kind >/dev/null 2>&1; then
   echo "ERROR: 'kind' is required but not installed." >&2
   exit 1

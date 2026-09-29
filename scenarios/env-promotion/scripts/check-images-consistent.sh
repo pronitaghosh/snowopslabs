@@ -106,7 +106,7 @@ done
 if [ "$fail" = "0" ]; then
   echo ""
   echo "All environments consistent. Confirm the running binary agrees:"
-  echo "  for e in dev staging prod; do echo -n \"\$e: \"; curl -s ${WORKLOAD_NAME}-\$e.\${DOMAIN_SUFFIX:-k3d.local}/version; echo; done"
+  echo "  for e in dev staging prod; do echo -n \"\$e: \"; curl -s ${WORKLOAD_NAME}-\$e.${INGRESS_URL_SUFFIX:-${DOMAIN_SUFFIX:-${CLUSTER_NAME:-snowops}.localhost}}/version; echo; done"
 fi
 
 exit "$fail"

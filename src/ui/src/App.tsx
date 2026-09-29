@@ -325,8 +325,14 @@ function AppLayout({ auth, onLogout }: { auth: AuthStatus; onLogout: () => void 
     document.getElementById(`nav-${next.path}`)?.focus()
   }
 
-  const connDot = wsStatus === 'connected' ? 'green' : wsStatus === 'connecting' ? 'yellow' : 'red'
-  const connLabel = wsStatus === 'connected' ? 'Connected' : wsStatus === 'connecting' ? 'Connecting…' : 'Disconnected'
+  // The footer reports the cluster, not just the socket: a live socket to a
+  // dead cluster must never read as healthy.
+  const clusterDown = wsStatus === 'connected' && isClusterDown(liveCluster)
+  const connDot = wsStatus === 'connecting' ? 'yellow' : wsStatus === 'disconnected' || clusterDown ? 'red' : 'green'
+  const connLabel = wsStatus === 'connecting' ? 'Connecting…'
+    : wsStatus === 'disconnected' ? 'labctl server offline'
+    : clusterDown ? (liveCluster?.context ? 'Cluster unreachable' : 'No cluster')
+    : 'Cluster reachable'
 
   const current = location.pathname.replace(/^\//, '') || 'dashboard'
   const pageTitle = NAV.find(n => n.path === current)?.label ?? 'SnowOps Labs'
@@ -451,6 +457,8 @@ function AppLayout({ auth, onLogout }: { auth: AuthStatus; onLogout: () => void 
           </div>
         )}
 
+        {clusterDown && liveCluster && <ClusterDownBanner info={liveCluster} />}
+
         <main className="main-content" id="main-content" tabIndex={-1}>
           <ErrorBoundary key={location.pathname}>
             <Outlet context={ctx} />
@@ -459,6 +467,33 @@ function AppLayout({ auth, onLogout }: { auth: AuthStatus; onLogout: () => void 
       </div>
 
       <LogPanel entries={logEntries} onClear={() => setLogEntries([])} />
+    </div>
+  )
+}
+
+// isClusterDown is true once a status frame says the API server did not answer.
+// Before the first frame nothing is known, so views render normally.
+function isClusterDown(info: ClusterInfo | null): boolean {
+  return info !== null && !info.connected
+}
+
+// ClusterDownBanner explains, on every page, why the views below show nothing:
+// without the API server every component and app would read "not installed".
+export function ClusterDownBanner({ info }: { info: ClusterInfo }) {
+  return (
+    <div className="banner banner-warn" role="alert">
+      <Icon name="alert-triangle" size={16} className="banner-icon" />
+      {info.context ? (
+        <span className="banner-body">
+          Cluster <code>{info.context}</code> is unreachable{info.error ? <> ({info.error})</> : null}.
+          Usually Docker is stopped or short of memory — run <code>labctl doctor</code>, then{' '}
+          <code>labctl init</code> to bring the lab back. Component and app states below are unknown until then.
+        </span>
+      ) : (
+        <span className="banner-body">
+          No cluster yet — run <code>labctl init</code> to create the lab.
+        </span>
+      )}
     </div>
   )
 }
@@ -477,12 +512,12 @@ function IncidentsRoute() {
   return <Incidents notify={notify} requestConfirm={requestConfirm} />
 }
 function PlatformRoute() {
-  const { notify, requestConfirm } = useApp()
-  return <Platform notify={notify} requestConfirm={requestConfirm} />
+  const { notify, requestConfirm, liveCluster } = useApp()
+  return <Platform notify={notify} requestConfirm={requestConfirm} clusterDown={isClusterDown(liveCluster)} />
 }
 function AppsRoute() {
-  const { notify, requestConfirm } = useApp()
-  return <Apps notify={notify} requestConfirm={requestConfirm} />
+  const { notify, requestConfirm, liveCluster } = useApp()
+  return <Apps notify={notify} requestConfirm={requestConfirm} clusterDown={isClusterDown(liveCluster)} />
 }
 function TrafficRoute() {
   const { notify } = useApp()

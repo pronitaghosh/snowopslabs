@@ -3,7 +3,7 @@ import { api } from '../api/client'
 import { qk } from '../lib/queryClient'
 import { useApiQuery } from '../hooks/useApiQuery'
 import type { PlatformProviderEntry, PlatformComponentDetail, DashboardURL, NotifyFn } from '../types'
-import { Badge } from '../components/Badge'
+import { Badge, UnknownBadge } from '../components/Badge'
 import { ErrorState } from '../components/ErrorState'
 import { Icon } from '../components/Icon'
 import { useJobRunner } from '../hooks/useJobRunner'
@@ -12,6 +12,9 @@ import type { ConfirmRequest } from '../components/ConfirmDialog'
 interface PlatformProps {
   notify: NotifyFn
   requestConfirm: (req: ConfirmRequest) => void
+  // While the cluster is unreachable every component would read as not
+  // installed; show Unknown and hold the actions instead.
+  clusterDown?: boolean
 }
 
 /** Display order for known categories; anything else sorts after, alphabetically. */
@@ -33,7 +36,7 @@ function sortCategories(cats: string[]) {
   })
 }
 
-export function Platform({ notify, requestConfirm }: PlatformProps) {
+export function Platform({ notify, requestConfirm, clusterDown = false }: PlatformProps) {
   // Poll while this tab is open (paused when the tab is hidden) so per-component
   // changes made out of band — a namespace deleted from the CLI, a cluster reset —
   // are reflected without a manual refresh. `installed` is re-derived from the
@@ -153,14 +156,17 @@ export function Platform({ notify, requestConfirm }: PlatformProps) {
                       <div key={key} className="platform-row">
                         <div className="platform-name truncate" title={entry.name}>{entry.name}</div>
                         <div className="row-flex">
-                          <Badge variant={entry.installed ? 'running' : 'stopped'}>
-                            {entry.installed ? 'Installed' : 'Not Installed'}
-                          </Badge>
+                          {clusterDown ? <UnknownBadge /> : (
+                            <Badge variant={entry.installed ? 'running' : 'stopped'}>
+                              {entry.installed ? 'Installed' : 'Not Installed'}
+                            </Badge>
+                          )}
                           <button className="btn btn-sm" onClick={() => openDetail(entry)}>Details</button>
                           {entry.installed ? (
                             <button
                               className="btn btn-sm btn-danger"
-                              disabled={busy[key]}
+                              disabled={busy[key] || clusterDown}
+                              title={clusterDown ? 'The cluster is unreachable' : undefined}
                               onClick={() => remove(entry)}
                             >
                               {busy[key] ? 'Removing…' : 'Remove'}
@@ -168,7 +174,8 @@ export function Platform({ notify, requestConfirm }: PlatformProps) {
                           ) : (
                             <button
                               className="btn btn-sm btn-primary"
-                              disabled={busy[key]}
+                              disabled={busy[key] || clusterDown}
+                              title={clusterDown ? 'The cluster is unreachable' : undefined}
                               onClick={() => install(entry, sibling)}
                             >
                               {busy[key] ? 'Installing…' : sibling ? 'Swap to this' : 'Install'}

@@ -17,6 +17,13 @@ labctl incident resolve                       # escape hatch: undo the active fa
 labctl incident resolve oom-kill              # works even if active state was lost
 ```
 
+## Room to inject
+
+`labctl incident inject` runs the same capacity check as `scenario up`: a fault
+whose `fault.yaml` declares `requirements.memory` (a noisy neighbour, say) is
+blocked when Docker lacks room for it, with the same advice. Injecting into an
+app an active scenario is graded against prints a warning.
+
 ## Which application gets broken
 
 A fault names its workload through `{{.WorkloadName}}` rather than an app
@@ -51,7 +58,7 @@ labctl incident inject --random --category network
 | `--category` | — | restrict `--random` to `workload`, `network`, `resources`, `storage` or `config` |
 | `--silent` | off | do not reveal which fault was injected |
 | `--force` | off | inject even when another incident is active |
-| `--deploy-prereqs` | off | build and deploy the target app if it is not running |
+| `--deploy-prereqs` | off | install the platform components the fault needs, and build and deploy the target app, if they are not running |
 
 ## Rules and timing
 
@@ -61,7 +68,7 @@ labctl incident inject --random --category network
 - The first `incident status` call timestamps *time-to-check*, the detection
   proxy. Resolution — the detection check passing, or the escape hatch — closes
   the run.
-- Each run is appended to `.labctl/history/incidents.jsonl` with MTTR, hints
+- Each run is appended to `~/.snowops/state/<cluster>/history/results.jsonl` with MTTR, hints
   used, and whether it was resolved manually or via `resolve`. The escape hatch
   counts as a non-completion for challenge scoring.
 

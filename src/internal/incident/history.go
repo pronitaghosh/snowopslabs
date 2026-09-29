@@ -3,7 +3,7 @@
 package incident
 
 // MTTR tracking: every completed incident run is recorded in the results
-// store (.labctl/history/results.jsonl) with kind "incident".
+// store (history/results.jsonl in the lab state directory) with kind "incident".
 
 import (
 	"path/filepath"
@@ -29,7 +29,7 @@ type Record struct {
 }
 
 func (e *Engine) resultsStore() *results.Store {
-	return results.NewStore(filepath.Join(e.ProjectRoot, ".labctl", "history"))
+	return results.NewStore(filepath.Join(e.StateRoot, "history"))
 }
 
 // History returns all recorded incident runs, oldest first.

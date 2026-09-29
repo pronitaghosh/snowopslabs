@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 # Guards the WSL-detection helper in bootstrap/setup-tools.sh, which drives the
-# post-setup "install wslu / mind the Windows hosts file" notice. The helper is
+# post-setup "open it in your Windows browser" notice. The helper is
 # kept pure (env var + kernel files only) precisely so it can be sourced here
 # without running the installer.
 
@@ -28,7 +28,11 @@ setup() {
 @test "is_wsl is false on a plain linux box (no env, no kernel signature)" {
   # Point the kernel-file scan at files that exist but lack the signature by
   # overriding nothing — a normal CI linux runner has neither the env var nor a
-  # microsoft/wsl kernel string, which is exactly this case.
+  # microsoft/wsl kernel string, which is exactly this case. Run on WSL itself,
+  # the real kernel files say WSL, so there is no plain box to check.
+  if grep -qiE 'microsoft|wsl' /proc/sys/kernel/osrelease /proc/version 2>/dev/null; then
+    skip "running on a WSL kernel"
+  fi
   OS="linux" WSL_DISTRO_NAME="" run is_wsl
   [ "$status" -ne 0 ]
 }

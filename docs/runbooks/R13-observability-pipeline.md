@@ -13,12 +13,12 @@ read.
 
 ## Preconditions
 
-- Docker/Colima running with ≥4 CPU / 8 GB.
+- Docker/Colima running with ≥2 CPU / 4 GB (`labctl init` starts colima at that size).
 - `bin/labctl` built (`make cli-build`).
 - A cluster with the monitoring stack: `make init` then
   `labctl platform up monitoring/metrics monitoring/grafana`.
 - `go-api` deployed: `labctl app deploy go-api`.
-- Hostnames resolvable: `labctl hosts add`.
+- Hostnames resolvable: the default `*.localhost` names need nothing; a lab on another suffix needs `labctl hosts add`.
 
 ---
 
@@ -221,6 +221,18 @@ In **Grafana → Explore → Tempo**, search `service.name=go-api`.
 > **Failure signature:** every Tempo query errors or returns nothing while Alloy
 > logs look healthy. Check the datasource URL — Tempo's HTTP API is on **3200**.
 > A datasource on 3100 fails identically to "nothing was traced".
+>
+> **Failure signature:** every Prometheus, Loki and Tempo query answers
+> `Unable to find datasource plugin`, and
+> `/api/datasources/uid/prometheus/health` answers `Plugin not registered`, so
+> every dashboard shows No data and its App and Namespace pickers are empty.
+> Grafana 13 re-installs its bundled datasource plugins at startup, which fails
+> on the chart's read-only root filesystem and leaves none of them loaded. `platform/monitoring/grafana/values.yaml` sets
+> `GF_PLUGINS_PREINSTALL_DISABLED` to skip that install; check it is still set,
+> and look for `Failed to install plugin` in
+> `kubectl -n monitoring logs deploy/grafana -c grafana`. `labctl init` runs
+> that health check and re-applies Grafana when it fails, since an existing lab
+> keeps the values its Grafana was first installed with.
 
 ---
 
@@ -323,7 +335,7 @@ kubectl -n kafka get podmonitor
 **Expect:** two PodMonitors, `kafka-exporter` and `kafka-broker`.
 
 ```bash
-curl -s 'http://prometheus.k3d.local/api/v1/targets?state=active' \
+curl -s 'http://prometheus.snowops.localhost/api/v1/targets?state=active' \
   | grep -o 'podMonitor/kafka/[a-z-]*' | sort -u
 ```
 

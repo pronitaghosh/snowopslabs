@@ -16,7 +16,7 @@ import (
 
 func newMetricsServer(t *testing.T, opts ...ServerOption) *Server {
 	t.Helper()
-	cfg := &config.Config{ProjectRoot: t.TempDir()}
+	cfg := &config.Config{ProjectRoot: t.TempDir(), StateDir: t.TempDir()}
 	return NewServer(cfg, nil, nil, nil, nil, nil, nil, nil, opts...)
 }
 

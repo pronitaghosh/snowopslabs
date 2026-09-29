@@ -22,7 +22,7 @@ var labCmd = &cobra.Command{
 	Short: "Snapshot, restore, and reset the whole lab",
 	Long: `Lab-level state operations. A snapshot records intent — which
 platform components, apps, and scenarios are active — as a small YAML file
-in .labctl/snapshots/. Restore replays the idempotent install paths to
+in ~/.snowops/state/<cluster>/snapshots/. Restore replays the idempotent install paths to
 converge back to it; reset tears everything down to post-init (cluster +
 ingress only).`,
 }
@@ -69,7 +69,7 @@ var labSnapshotCmd = &cobra.Command{
 		for _, w := range warnings {
 			fmt.Fprintf(os.Stderr, "Warning: %s\n", w)
 		}
-		if err := lab.NewStore(cfg.ProjectRoot).Save(snap); err != nil {
+		if err := lab.NewStore(cfg.StateDir).Save(snap); err != nil {
 			return err
 		}
 		printSnapshot(snap)
@@ -82,7 +82,7 @@ var labSnapshotsCmd = &cobra.Command{
 	Use:   "snapshots",
 	Short: "List saved snapshots",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		snaps, err := lab.NewStore(cfg.ProjectRoot).List()
+		snaps, err := lab.NewStore(cfg.StateDir).List()
 		if err != nil {
 			return err
 		}
@@ -110,7 +110,7 @@ idempotent — restoring over a half-converged lab is safe, and already-active
 pieces are skipped.`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		snap, err := lab.NewStore(cfg.ProjectRoot).Load(args[0])
+		snap, err := lab.NewStore(cfg.StateDir).Load(args[0])
 		if err != nil {
 			return err
 		}
@@ -134,7 +134,7 @@ var labDeleteCmd = &cobra.Command{
 	Short: "Delete a saved snapshot",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return lab.NewStore(cfg.ProjectRoot).Delete(args[0])
+		return lab.NewStore(cfg.StateDir).Delete(args[0])
 	},
 }
 

@@ -4,8 +4,12 @@ package k8s
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 )
 
@@ -332,6 +336,140 @@ func TestUniqueLines(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := uniqueLines(tt.in); fmt.Sprint(got) != fmt.Sprint(tt.want) {
 				t.Errorf("uniqueLines(%q) = %v, want %v", tt.in, got, tt.want)
+			}
+		})
+	}
+}
+
+// stubKubectl puts a fake kubectl first on PATH. script is the body of a POSIX
+// shell script that sees kubectl's arguments as "$*".
+func stubKubectl(t *testing.T, script string) {
+	t.Helper()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "kubectl")
+	if err := os.WriteFile(path, []byte("#!/bin/sh\n"+script), 0o755); err != nil { //nolint:gosec // test stub must be executable
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+}
+
+func TestGetClusterInfo(t *testing.T) {
+	tests := []struct {
+		name          string
+		script        string
+		wantConnected bool
+		wantError     string
+		wantNodes     int
+	}{
+		{
+			name: "a reachable cluster is connected",
+			script: `case "$*" in
+  "config current-context") echo k3d-snowops ;;
+  *readyz*) echo ok ;;
+  *"--minify"*) echo https://127.0.0.1:6443 ;;
+  "version -o json") echo '{"serverVersion":{"gitVersion":"v1.33.6+k3s1"}}' ;;
+  "get nodes --no-headers") printf 'a Ready\nb Ready\n' ;;
+esac`,
+			wantConnected: true,
+			wantNodes:     2,
+		},
+		{
+			name: "a configured but unreachable cluster is not connected",
+			script: `case "$*" in
+  "config current-context") echo k3d-snowops ;;
+  *readyz*) echo "Unable to connect to the server: net/http: TLS handshake timeout" >&2; exit 1 ;;
+esac`,
+			wantError: "net/http: TLS handshake timeout",
+		},
+		{
+			name:   "no current context is not connected",
+			script: `exit 1`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			stubKubectl(t, tt.script)
+			info, err := GetClusterInfo(t.Context())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if info.Connected != tt.wantConnected {
+				t.Errorf("Connected = %v, want %v", info.Connected, tt.wantConnected)
+			}
+			if info.Error != tt.wantError {
+				t.Errorf("Error = %q, want %q", info.Error, tt.wantError)
+			}
+			if info.NodeCount != tt.wantNodes {
+				t.Errorf("NodeCount = %d, want %d", info.NodeCount, tt.wantNodes)
+			}
+		})
+	}
+}
+
+func TestHelmReleaseDeployed(t *testing.T) {
+	// Only a secret labelled status=deployed counts; a failed install leaves
+	// status=failed, which must not make init skip the install.
+	stubKubectl(t, `case "$*" in
+  *"name=grafana,status=deployed"*) echo "sh.helm.release.v1.grafana.v1 helm.sh/release.v1 1 5m" ;;
+esac`)
+	if !HelmReleaseDeployed(t.Context(), "monitoring", "grafana") {
+		t.Error("a deployed release should count")
+	}
+	if HelmReleaseDeployed(t.Context(), "monitoring", "prometheus") {
+		t.Error("a release with no deployed revision must not count")
+	}
+}
+
+func TestUnreachableReason(t *testing.T) {
+	tests := []struct {
+		name     string
+		err      error
+		expected string
+	}{
+		{
+			name: "kubectl stderr, generic prefix dropped",
+			err: &kubectlError{
+				err:    errors.New("exit status 1"),
+				stderr: "E0927 noise\nUnable to connect to the server: net/http: TLS handshake timeout",
+			},
+			expected: "net/http: TLS handshake timeout",
+		},
+		{name: "plain error", err: errors.New("kubectl not found in PATH"), expected: "kubectl not found in PATH"},
+		{
+			name:     "long message is cut on a rune boundary",
+			err:      errors.New(strings.Repeat("é", maxReasonRunes+10)),
+			expected: strings.Repeat("é", maxReasonRunes) + "…",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := unreachableReason(tt.err); got != tt.expected {
+				t.Errorf("unreachableReason = %q, want %q", got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestAgentCount(t *testing.T) {
+	tests := []struct {
+		name     string
+		script   string
+		expected int
+		wantErr  bool
+	}{
+		{name: "two agents", script: `printf 'node/k3d-lab-agent-0\nnode/k3d-lab-agent-1\n'`, expected: 2},
+		{name: "server only", script: `exit 0`, expected: 0},
+		{name: "unreachable", script: `echo "connection refused" >&2; exit 1`, wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			stubKubectl(t, tt.script)
+			got, err := AgentCount(t.Context())
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if got != tt.expected {
+				t.Errorf("AgentCount = %d, want %d", got, tt.expected)
 			}
 		})
 	}

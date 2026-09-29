@@ -5,11 +5,14 @@ package cli
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"text/tabwriter"
 	"time"
 
+	"github.com/sagar2395/snowopslabs/internal/labcheck"
 	resultspkg "github.com/sagar2395/snowopslabs/internal/results"
 	"github.com/sagar2395/snowopslabs/internal/scaffold"
 	scenariopkg "github.com/sagar2395/snowopslabs/internal/scenario"
@@ -97,12 +100,21 @@ var scenarioUpCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+		// Check the lab has room before installing any prerequisite for it.
+		// Warnings are left to the activation itself, which checks again.
+		if scenes.Admit != nil && !s.Active {
+			if d, err := scenes.Demand(s); err == nil {
+				if err := scenes.Admit(cmd.Context(), io.Discard, d); err != nil {
+					return fmt.Errorf("scenario %s cannot start: %w", name, err)
+				}
+			}
+		}
+		if err := ensurePlatformPrereqs(cmd.Context(), os.Stdout, s.Prerequisites.Platform, scenarioDeployPrereqs); err != nil {
+			return err
+		}
 		if err := ensureAppsDeployed(cmd.Context(), scenes.ResolvedPrereqApps(s), scenarioDeployPrereqs); err != nil {
 			return err
 		}
-		// Platform prerequisites are not installed automatically; warn about
-		// any that look missing.
-		warnMissingPlatformPrereqs(cmd.Context(), os.Stderr, s.Prerequisites.Platform)
 		// An already-active scenario is left alone unless --force is given.
 		if s.Active && !scenarioUpForce {
 			fmt.Fprintf(os.Stderr, "Scenario %s is already active. Re-run with --force to reinstall.\n", name)
@@ -284,7 +296,7 @@ func recordScenarioVerify(name string, results []checks.Result, startedAt time.T
 		objectives = s.Objectives
 	}
 	rec := resultspkg.NewScenarioRecord(name, "", objectives, checkOutcomes(results), startedAt, time.Now())
-	_ = resultspkg.NewStore(filepath.Join(cfg.ProjectRoot, ".labctl", "history")).Append(rec)
+	_ = resultspkg.NewStore(filepath.Join(cfg.StateDir, "history")).Append(rec)
 }
 
 // checkOutcomes converts check results to the form the results store records.
@@ -300,34 +312,29 @@ func checkOutcomes(results []checks.Result) []resultspkg.CheckOutcome {
 	return out
 }
 
-// newCheckRunner builds a check runner for the lab: Prometheus at
-// PROMETHEUS_URL or the ingress hostname, and the standard script
-// environment.
+// newCheckRunner is the lab's check runner (see labcheck) with the verify
+// per-check timeout.
 func newCheckRunner() *checks.Runner {
-	r := checks.NewRunner()
+	r := labcheck.NewRunner(cfg, scenes.Workload, "")
 	r.DefaultTimeout = verifyCheckTimeout
-	promURL := os.Getenv("PROMETHEUS_URL")
-	if promURL == "" {
-		promURL = "http://prometheus." + cfg.DomainSuffix
-	}
-	r.PrometheusURL = promURL
-	// Check scripts need the bound app, as component scripts do (ADR-0014).
-	r.Env = []string{
-		"DOMAIN_SUFFIX=" + cfg.DomainSuffix,
-		"MONITORING_NAMESPACE=" + cfg.MonitoringNamespace,
-		"PROJECT_ROOT=" + cfg.ProjectRoot,
-		// The same Prometheus the promql checks use.
-		"PROMETHEUS_URL=" + promURL,
-		"WORKLOAD_NAME=" + scenes.Workload.Name,
-		"WORKLOAD_NAMESPACE=" + scenes.Workload.Namespace,
-		"WORKLOAD_PORT=" + scenes.Workload.Port,
-		"WORKLOAD_METRIC=" + scenes.Workload.Metric,
-	}
 	return r
 }
 
+// printCheckResults prints one table row per check. A script check's error
+// often spans several lines (the diagnosis and the commands to run); inside the
+// table those lines would break its columns, so a row shows the first line and
+// the rest follows the table under the check's name.
 func printCheckResults(results []checks.Result) {
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	printCheckResultsTo(os.Stdout, results)
+}
+
+func printCheckResultsTo(out io.Writer, results []checks.Result) {
+	type more struct {
+		name  string
+		lines string
+	}
+	var details []more
+	w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
 	for _, r := range results {
 		mark := "PASS"
 		if !r.Pass {
@@ -344,11 +351,18 @@ func printCheckResults(results []checks.Result) {
 			detail = fmt.Sprintf("got: %s, want: %s", orDash(r.Got), orDash(r.Want))
 		}
 		if r.Error != "" {
-			detail = "error: " + r.Error
+			first, rest, _ := strings.Cut(strings.TrimRight(r.Error, "\n"), "\n")
+			detail = "error: " + first
+			if rest != "" {
+				details = append(details, more{r.Name, rest})
+			}
 		}
 		fmt.Fprintf(w, "%s\t%s\t(%s)\t%s\t%dms\n", mark, r.Name, r.Type, detail, r.DurationMS)
 	}
 	_ = w.Flush()
+	for _, d := range details {
+		fmt.Fprintf(out, "\n%s:\n%s\n", d.name, d.lines)
+	}
 }
 
 func orDash(s string) string {
@@ -549,7 +563,7 @@ func init() {
 
 	scenarioNewCmd.Flags().BoolVar(&scenarioNewForce, "force", false, "overwrite the scenario if it already exists")
 	scenarioUpCmd.Flags().BoolVar(&scenarioUpForce, "force", false, "reinstall even if the scenario is already active")
-	scenarioUpCmd.Flags().BoolVar(&scenarioDeployPrereqs, "deploy-prereqs", false, "build and deploy any prerequisite apps that are not yet running")
+	scenarioUpCmd.Flags().BoolVar(&scenarioDeployPrereqs, "deploy-prereqs", false, "install any prerequisite platform components and apps that are not yet running")
 	scenarioUpCmd.Flags().StringToStringVar(&scenarioUpParams, "set", nil, "override a scenario parameter (repeatable): --set Name=value, matching the parameter name exactly (e.g. --set Threshold=15 --set MaxReplicas=4)")
 
 	scenarioCmd.AddCommand(scenarioNewCmd)

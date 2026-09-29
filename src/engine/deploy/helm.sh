@@ -66,7 +66,7 @@ if [ ! -d "${HELM_CHART_PATH}" ]; then
     --set "probes.readyPath=${APP_READY_PATH:-/ready}"
     --set "metrics.path=${APP_METRICS_PATH:-/metrics}"
     --set "ingress.className=${INGRESS_CLASS:-traefik}"
-    --set "ingress.host=${APP_NAME}.${DOMAIN_SUFFIX:-k3d.local}"
+    --set "ingress.host=${APP_NAME}.${DOMAIN_SUFFIX:-${CLUSTER_NAME:-snowops}.localhost}"
   )
   # Resources, when the app declares them. A JVM cannot run inside the defaults
   # sized for a small Go service, and an app silently OOMKilled at startup is the
@@ -143,8 +143,8 @@ case "${COMMAND}" in
 
     echo ""
     echo "✓ Deployment complete! Access the application:"
-    echo "  - HTTP: http://${APP_NAME}.${DOMAIN_SUFFIX:-k3d.local}"
-    echo "  - Metrics: http://${APP_NAME}.${DOMAIN_SUFFIX:-k3d.local}/metrics"
+    echo "  - HTTP: http://${APP_NAME}.${INGRESS_URL_SUFFIX:-${DOMAIN_SUFFIX:-${CLUSTER_NAME:-snowops}.localhost}}"
+    echo "  - Metrics: http://${APP_NAME}.${INGRESS_URL_SUFFIX:-${DOMAIN_SUFFIX:-${CLUSTER_NAME:-snowops}.localhost}}/metrics"
     echo ""
     echo "View deployment status:"
     echo "  kubectl get deployments -n ${NAMESPACE}"

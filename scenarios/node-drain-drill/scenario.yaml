@@ -10,6 +10,11 @@ prerequisites:
     - monitoring/metrics
   apps:
     - "{{.WorkloadName}}"
+# Draining a worker needs a second one to move the pods to. labctl adds the
+# agent when the drill starts, if Docker has room for it.
+requirements:
+  memory: 100Mi
+  agents: 2
 runtimes:
   - k3d
   - kind
@@ -125,7 +130,7 @@ snippets:
 explore:
   urls:
     - label: "Grafana — node drain: success rate, cordons and pod placement"
-      url: "http://grafana.{{.DomainSuffix}}/d/node-drain-drill"
+      url: "http://grafana.{{.IngressURLSuffix}}/d/node-drain-drill"
   commands:
     - label: "1. Apply your PodDisruptionBudget (nothing stages it)"
       command: "labctl scenario render node-drain-drill manifests/baseline.yaml --app {{.WorkloadName}} | kubectl apply -f -"
@@ -154,5 +159,5 @@ explore:
     - "Expect the monitoring stack to go dark if you drain the node holding its storage. Prometheus, Loki and Alertmanager use local-path volumes, and a local PersistentVolume is pinned to one node by node affinity — so those pods cannot reschedule anywhere and sit Pending until you uncordon. That is not a lab artefact: it is how node-local storage behaves in production, and it is the reason stateful workloads need either replicated storage or a drain plan of their own."
     - "Because of that, verify AFTER you uncordon. Prometheus keeps its data on the same volume, so the window covering your drain is still there once it restarts — but it cannot answer while it is Pending."
     - "Uncordon when you are done. A node left cordoned starves every later scenario of capacity — which is why that is a graded step here, not an afterthought."
-    - "On single-node clusters a drain has nowhere to reschedule pods. k3d defaults to 2 agents (AGENTS env var) precisely so this drill works."
+    - "On single-node clusters a drain has nowhere to reschedule pods. The drill runs on two agent nodes; labctl adds the second when it starts."
     - "Tear down with 'labctl scenario down node-drain-drill' — it removes the PDB, scales {{.WorkloadName}} back and uncordons anything left behind."

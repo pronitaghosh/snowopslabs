@@ -98,18 +98,54 @@ func TestBrowserCommands(t *testing.T) {
 }
 
 func TestWSLDoctorNotes(t *testing.T) {
-	notes := wslDoctorNotes()
-	if len(notes) == 0 {
-		t.Fatal("expected WSL doctor notes")
+	tests := []struct {
+		name            string
+		suffix          string
+		resolvesLocally bool
+		want            string
+		notWant         string
+	}{
+		{name: "localhost needs no hosts file", suffix: "snowops.localhost", resolvesLocally: true, want: "No hosts-file edits", notWant: `drivers\etc\hosts`},
+		{name: "another suffix needs the windows hosts file", suffix: "k3d.local", want: `drivers\etc\hosts`, notWant: "No hosts-file edits"},
 	}
-	// The note about the Windows hosts file must be present.
-	found := false
-	for _, n := range notes {
-		if strings.Contains(n, `drivers\etc\hosts`) {
-			found = true
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			notes := strings.Join(wslDoctorNotes("/home/me/snowopslabs", tt.suffix, tt.resolvesLocally), "\n")
+			if !strings.Contains(notes, tt.want) || strings.Contains(notes, tt.notWant) {
+				t.Errorf("notes should mention %q and not %q:\n%s", tt.want, tt.notWant, notes)
+			}
+			if !strings.Contains(notes, "grafana."+tt.suffix) {
+				t.Errorf("notes should show the lab's own hostname:\n%s", notes)
+			}
+		})
+	}
+}
+
+// Doctor prints each note as one bullet, so a wrapped note must continue
+// inside the same item rather than become a bullet of its own.
+func TestWSLDoctorNotesOneBulletPerNote(t *testing.T) {
+	for _, local := range []bool{true, false} {
+		for _, n := range wslDoctorNotes("/mnt/c/Users/me/snowopslabs", "snowops.localhost", local) {
+			if strings.TrimLeft(n, " ") != n {
+				t.Errorf("note starts with whitespace, so it would print as its own bullet: %q", n)
+			}
 		}
 	}
-	if !found {
-		t.Fatalf("WSL notes should mention the Windows hosts file, got %v", notes)
+}
+
+func TestWSLDoctorNotesWarnOnWindowsDrive(t *testing.T) {
+	has := func(notes []string) bool {
+		for _, n := range notes {
+			if strings.Contains(n, "Windows drive") {
+				return true
+			}
+		}
+		return false
+	}
+	if !has(wslDoctorNotes("/mnt/c/Users/me/snowopslabs", "snowops.localhost", true)) {
+		t.Error("a lab under /mnt/c should be warned about")
+	}
+	if has(wslDoctorNotes("/home/me/snowopslabs", "snowops.localhost", true)) {
+		t.Error("a lab on the Linux filesystem should not be warned about")
 	}
 }

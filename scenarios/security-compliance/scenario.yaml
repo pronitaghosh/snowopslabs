@@ -11,6 +11,10 @@ prerequisites:
     - monitoring/grafana
   apps:
     - "{{.WorkloadName}}"
+# Memory for this scenario's own workloads; shared releases, platform
+# components and apps are counted from config/footprints.yaml.
+requirements:
+  memory: 300Mi
 runtimes:
   - k3d
   - kind
@@ -124,7 +128,7 @@ checks:
     query: 'min(up{kubernetes_namespace="{{.WorkloadNamespace}}",job="{{.WorkloadName}}"})'
     operator: ">="
     value: "1"
-    remediation: "{{.WorkloadName}}'s metrics are not arriving, so its panels read 'No data' while the app itself looks healthy. Find the target and its error at http://prometheus.{{.DomainSuffix}}/targets (search {{.WorkloadName}}), then check the pod still carries the prometheus.io/scrape annotation and that allow-monitoring-scrape names the port the target is actually on — an injected mesh sidecar publishes merged metrics on 15020, not the app's own 8080. See docs/runbooks/R13-observability-pipeline.md."
+    remediation: "{{.WorkloadName}}'s metrics are not arriving, so its panels read 'No data' while the app itself looks healthy. Find the target and its error at http://prometheus.{{.IngressURLSuffix}}/targets (search {{.WorkloadName}}), then check the pod still carries the prometheus.io/scrape annotation and that allow-monitoring-scrape names the port the target is actually on — an injected mesh sidecar publishes merged metrics on 15020, not the app's own 8080. See docs/runbooks/R13-observability-pipeline.md."
 
   - name: kyverno-metrics-scraped
     type: promql
@@ -169,7 +173,7 @@ checks:
     script: checks/check-ingress-tls.sh
     timeoutSeconds: 60
     pending: true
-    remediation: "A Ready Certificate protects nothing until something serves it — this grades the TLS handshake itself, not the manifest. Point the Ingress at the Secret: kubectl -n {{.WorkloadNamespace}} patch ingress {{.WorkloadName}} --type=merge -p '{\"metadata\":{\"annotations\":{\"traefik.ingress.kubernetes.io/router.entrypoints\":\"web,websecure\"}},\"spec\":{\"tls\":[{\"hosts\":[\"{{.WorkloadName}}.{{.DomainSuffix}}\"],\"secretName\":\"{{.WorkloadName}}-tls-secret\"}]}}' — then check what is on the wire: echo | openssl s_client -connect {{.WorkloadName}}.{{.DomainSuffix}}:443 -servername {{.WorkloadName}}.{{.DomainSuffix}} 2>/dev/null | openssl x509 -noout -issuer -subject"
+    remediation: "A Ready Certificate protects nothing until something serves it — this grades the TLS handshake itself, not the manifest. Point the Ingress at the Secret: kubectl -n {{.WorkloadNamespace}} patch ingress {{.WorkloadName}} --type=merge -p '{\"metadata\":{\"annotations\":{\"traefik.ingress.kubernetes.io/router.entrypoints\":\"web,websecure\"}},\"spec\":{\"tls\":[{\"hosts\":[\"{{.WorkloadName}}.{{.DomainSuffix}}\"],\"secretName\":\"{{.WorkloadName}}-tls-secret\"}]}}' — then check what is on the wire: echo | openssl s_client -connect 127.0.0.1:443 -servername {{.WorkloadName}}.{{.DomainSuffix}} 2>/dev/null | openssl x509 -noout -issuer -subject"
 
 snippets:
   - label: "The four ClusterPolicies — shipped in Audit, promoted to Enforce by you"
@@ -213,7 +217,7 @@ references:
 explore:
   urls:
     - label: "Grafana — Security & Compliance dashboard"
-      url: "http://grafana.{{.DomainSuffix}}/d/security-compliance"
+      url: "http://grafana.{{.IngressURLSuffix}}/d/security-compliance"
   commands:
     - label: "1. What is being enforced right now? (failureAction is the column that matters)"
       command: "kubectl get clusterpolicies -o custom-columns='POLICY:.metadata.name,ACTION:.spec.rules[0].validate.failureAction,READY:.status.conditions[?(@.type==\"Ready\")].status'"
@@ -235,8 +239,8 @@ explore:
       command: "kubectl -n {{.WorkloadNamespace}} get certificate,certificaterequest,secret {{.WorkloadName}}-tls-secret 2>/dev/null; kubectl -n {{.WorkloadNamespace}} describe certificate {{.WorkloadName}}-tls 2>/dev/null | tail -20"
     - label: "8. WIRE IT UP — a Ready certificate protects nothing until the Ingress serves it"
       command: "kubectl -n {{.WorkloadNamespace}} patch ingress {{.WorkloadName}} --type=merge -p '{\"metadata\":{\"annotations\":{\"traefik.ingress.kubernetes.io/router.entrypoints\":\"web,websecure\"}},\"spec\":{\"tls\":[{\"hosts\":[\"{{.WorkloadName}}.{{.DomainSuffix}}\"],\"secretName\":\"{{.WorkloadName}}-tls-secret\"}]}}'"
-    - label: "9. PROVE it on the wire — before this, 443 answers with CN=TRAEFIK DEFAULT CERT"
-      command: "echo | openssl s_client -connect {{.WorkloadName}}.{{.DomainSuffix}}:443 -servername {{.WorkloadName}}.{{.DomainSuffix}} 2>/dev/null | openssl x509 -noout -issuer -subject -dates"
+    - label: "9. PROVE it on the wire — before this, 443 answers with CN=TRAEFIK DEFAULT CERT (openssl dials this machine and names the host in -servername; if the lab's HTTPS port is not 443, use that port)"
+      command: "echo | openssl s_client -connect 127.0.0.1:443 -servername {{.WorkloadName}}.{{.DomainSuffix}} 2>/dev/null | openssl x509 -noout -issuer -subject -dates"
     - label: "10. Inspect the signed leaf — issuer, validity window and SANs"
       command: "kubectl -n {{.WorkloadNamespace}} get secret {{.WorkloadName}}-tls-secret -o jsonpath='{.data.tls\\.crt}' | base64 -d | openssl x509 -noout -subject -issuer -dates -ext subjectAltName"
     - label: "11. The isolation posture — default-deny plus its explicit allowances"
@@ -244,7 +248,7 @@ explore:
     - label: "12. Prove isolation holds — a pod in another namespace must NOT reach {{.WorkloadName}}"
       command: "kubectl run np-probe --image=curlimages/curl:8.11.1 --restart=Never --rm -i --overrides='{\"spec\":{\"containers\":[{\"name\":\"np-probe\",\"image\":\"curlimages/curl:8.11.1\",\"command\":[\"curl\",\"-s\",\"-o\",\"/dev/null\",\"-w\",\"cross-namespace HTTP %{http_code}\\n\",\"--connect-timeout\",\"5\",\"http://{{.WorkloadService}}:8080/health\"],\"securityContext\":{\"runAsNonRoot\":true,\"runAsUser\":65534,\"allowPrivilegeEscalation\":false},\"resources\":{\"limits\":{\"cpu\":\"50m\",\"memory\":\"64Mi\"}}}]}}'; echo 'HTTP 000 means the NetworkPolicy dropped it — that is the pass'"
     - label: "13. …while the ingress path, which IS allowed, still works"
-      command: "curl -s -o /dev/null -w 'via ingress HTTP %{http_code}\\n' http://{{.WorkloadName}}.{{.DomainSuffix}}/health"
+      command: "curl -s -o /dev/null -w 'via ingress HTTP %{http_code}\\n' http://{{.WorkloadName}}.{{.IngressURLSuffix}}/health"
     - label: "14. Grade the whole drill"
       command: "labctl scenario verify security-compliance --watch --timeout 5m"
   tips:
@@ -259,7 +263,7 @@ explore:
     - "Existence is not enforcement. A ClusterPolicy that excludes your namespace, and a default-deny NetworkPolicy sitting next to an allow-all one, both look perfectly healthy in 'kubectl get'. Both checks here grade behaviour instead."
     - "NetworkPolicies are additive and have no deny rule — the only way to deny is for no policy to allow. That is why removing default-deny-all is not the only way to break isolation."
     - "Default-deny EGRESS is where teams hurt themselves. Deny outbound and a mesh sidecar can never reach istiod: it never gets its config, its probe on :15021 is refused forever, and every new pod sits at 1/2 Running while the app container is perfectly healthy. allow-mesh-control-plane is that rule; read its comment before you write your own default-deny namespace."
-    - "The scrape port is not always the app port: with a sidecar injected, Prometheus scrapes the merged endpoint on 15020, not the app's own 8080, so allow-monitoring-scrape names both. Write the allow rule against the port on http://prometheus.{{.DomainSuffix}}/targets, not the one in the Service."
+    - "The scrape port is not always the app port: with a sidecar injected, Prometheus scrapes the merged endpoint on 15020, not the app's own 8080, so allow-monitoring-scrape names both. Write the allow rule against the port on http://prometheus.{{.IngressURLSuffix}}/targets, not the one in the Service."
     - "Once Enforce is on it applies to YOU. A throwaway 'kubectl run --image=curlimages/curl' debug pod is rejected like anything else — no runAsNonRoot, no limits. Explore step 10 shows the compliant form; needing it is the point, not an inconvenience."
     - "'kubectl get clusterpolicyreports' is usually empty: reports are written per namespace for namespaced resources. Use 'kubectl get policyreports -A'."
     - "The security dashboard needs Kyverno's ServiceMonitors, which values/kyverno.yaml enables. If the policy panels read 'No data', that is the finding — see docs/runbooks/R13-observability-pipeline.md."

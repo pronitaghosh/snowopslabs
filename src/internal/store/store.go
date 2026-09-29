@@ -21,6 +21,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sagar2395/snowopslabs/internal/config"
 	_ "modernc.org/sqlite" // pure-Go driver, registered as "sqlite"
 )
 
@@ -31,17 +32,13 @@ var migrationFS embed.FS
 // labctl. Open refuses it rather than risk misreading an unknown schema.
 var ErrSchemaTooNew = errors.New("database schema is newer than this build understands")
 
-// DefaultPath returns the database location: $SNOWOPS_HOME/snowops.db,
-// defaulting to ~/.snowops/snowops.db.
+// DefaultPath returns the database location: <config.Home>/snowops.db.
 func DefaultPath() (string, error) {
-	if home := os.Getenv("SNOWOPS_HOME"); home != "" {
-		return filepath.Join(home, "snowops.db"), nil
-	}
-	dir, err := os.UserHomeDir()
+	home, err := config.Home()
 	if err != nil {
-		return "", fmt.Errorf("locating home directory (set SNOWOPS_HOME to override): %w", err)
+		return "", err
 	}
-	return filepath.Join(dir, ".snowops", "snowops.db"), nil
+	return filepath.Join(home, "snowops.db"), nil
 }
 
 // Store is an open database with all migrations applied.

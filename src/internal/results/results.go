@@ -2,8 +2,8 @@
 
 // Package results stores the outcome of every scored run (incidents,
 // challenges, learning modules, scenario verifications, comparisons) as one
-// JSON record per line in .labctl/history/results.jsonl. The leaderboard is
-// built from these records.
+// JSON record per line in history/results.jsonl in the lab state directory.
+// The leaderboard is built from these records.
 package results
 
 import (

@@ -5,7 +5,7 @@ The commands each phase runs. Set the environment once:
 ```sh
 FAULT=service-selector-broken
 NS=go-api                                     # fault.yaml target.namespace
-DOMAIN_SUFFIX=k3d.local
+DOMAIN_SUFFIX=snowops.localhost
 PROM=http://prometheus.$DOMAIN_SUFFIX
 ALERTMANAGER_URL=http://alertmanager.$DOMAIN_SUFFIX
 NOTES=$SCRATCHPAD/review-$FAULT.md            # every command and output lands here
@@ -179,7 +179,7 @@ kubectl -n "$NS" patch <full fix>
 
 # 4. active state lost — resolve by name
 ./bin/labctl incident inject "$FAULT"
-rm -f .labctl/active-incident* 2>/dev/null
+rm -f ~/.snowops/state/snowops/incidents/active.yaml 2>/dev/null
 ./bin/labctl incident resolve "$FAULT"
 ```
 

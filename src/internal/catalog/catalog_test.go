@@ -242,7 +242,7 @@ components:
 checks:
   - name: reachable
     type: http
-    url: "http://go-api.{{.DomainSuffix}}/health"
+    url: "http://go-api.{{.IngressURLSuffix}}/health"
 `
 	write(t, root, "scenarios", "s1", "scenario.yaml", good)
 

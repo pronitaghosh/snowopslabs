@@ -18,7 +18,9 @@ export interface ClusterInfo {
   server: string
   k8sVersion: string
   nodeCount: number
+  // True only when the API server answered; `error` then says why not.
   connected: boolean
+  error?: string
 }
 
 export interface PlatformComponent {
@@ -146,6 +148,18 @@ export interface StatusResponse {
   platform: PlatformStatus
   apps: AppInfo[] | null
   domainSuffix: string
+  /** domainSuffix plus the ingress port when it is not 80 — build URLs from this. */
+  ingressUrlSuffix?: string
+}
+
+/** GET /capacity: the Docker engine's size and the lab's memory use, in MiB. */
+export interface Capacity {
+  cpus: number
+  memoryMiB: number
+  /** Memory in use on the machine that runs the cluster. */
+  usedMiB: number
+  /** The part of memoryMiB the capacity check lets the lab plan to use. */
+  usableMiB: number
 }
 
 // ── Scenarios ────────────────────────────────────────────────────────────────
@@ -217,6 +231,14 @@ export interface ScenarioStage {
   components?: ScenarioComponent[]
 }
 
+/** What activating a scenario needs from the lab (pkg/scenario.Requirements). */
+export interface ScenarioRequirements {
+  memory?: string
+  cpus?: number
+  agents?: number
+  exclusive?: boolean
+}
+
 export interface Scenario {
   name: string
   displayName: string
@@ -225,6 +247,7 @@ export interface Scenario {
   active: boolean
   runtimes?: string[]
   prerequisites?: ScenarioPrerequisites
+  requirements?: ScenarioRequirements
   components?: ScenarioComponent[]
   stages?: ScenarioStage[]
   explore?: Explore

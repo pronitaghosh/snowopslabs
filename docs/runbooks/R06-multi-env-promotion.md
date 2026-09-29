@@ -27,8 +27,7 @@ the muscle memory you build (`kubectl set image`, `kubectl rollout status`,
 ```bash
 # 0. Set up: deploys all three namespaces at the v1.0.0 baseline.
 #    Stage 0 builds go-api:v1.0.0 and loads it into the cluster automatically.
-labctl scenario up env-promotion
-labctl hosts add                           # go-api-dev/staging/prod.<domain>, read from the Ingress
+labctl scenario up env-promotion          # go-api-dev/staging/prod.<domain> resolve as *.localhost
 
 # 1. Baseline — all three serve the SAME version.
 for e in dev staging prod; do echo -n "$e: "; curl -s go-api-$e.<domain>/version; echo; done

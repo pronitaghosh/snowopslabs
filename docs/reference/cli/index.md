@@ -5,36 +5,34 @@ runs scenarios, injects faults and grades your fix.
 
 ## Install
 
-**Download a release** — no Go or Node needed. Pick the archive for your
-OS/arch from the [Releases page](https://github.com/sagar2395/snowopslabs/releases).
-macOS, Linux and Windows (inside WSL2) use the same commands:
-
 ```bash
-VERSION=1.0.0                                          # from the Releases page
-OS=$(uname -s | tr '[:upper:]' '[:lower:]')            # darwin | linux
-ARCH=$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')
-BASE="https://github.com/sagar2395/snowopslabs/releases/download/v${VERSION}"
-
-curl -fsSL "${BASE}/labctl_${VERSION}_${OS}_${ARCH}.tar.gz" | tar xz labctl
-sudo mv labctl /usr/local/bin/
-labctl --version
+git clone --branch stable https://github.com/sagar2395/snowopslabs.git
+cd snowopslabs && ./install.sh
 ```
 
-**Build from source** — needs Go 1.25+ and Node 22+:
+`install.sh` puts the `labctl` release named by the clone's `LAB_VERSION` in
+`~/.local/bin`, with no sudo, and records the clone in `~/.snowops/lab-dir`.
+Re-run it after upgrading the clone (`git merge origin/stable`). The per-OS
+guides are under [Getting started](../../getting-started/macos.md).
+
+`labctl` finds the lab in this order: `--project-dir`; the clone around the
+working directory; `SNOWOPS_LAB_DIR`; the recorded clone. Lab state (active
+scenarios and faults, history, progress, snapshots, users) is kept per cluster
+in `~/.snowops/state/<cluster>/` (`SNOWOPS_HOME` moves `~/.snowops`). State an
+older labctl kept in the clone's `.labctl/` is moved there on first use.
+
+**Build from source** (contributors) — needs Go 1.25+ and Node 22+; see
+[CONTRIBUTING](../../../CONTRIBUTING.md#development-setup):
 
 ```bash
 make cli-build        # builds bin/labctl with the UI embedded
-make cli-install      # builds and copies onto your PATH
 ```
-
-The [Quickstart](../../../README.md#quickstart) has the per-OS walkthrough,
-including checksum verification.
 
 ## Global flags
 
 | Flag | Default | Description |
 |---|---|---|
-| `--project-dir` | auto-detected | Project root directory |
+| `--project-dir` | auto-detected | The lab (a snowopslabs clone) to use; see [Install](#install) for how it is found otherwise |
 | `-v, --verbose` | `false` | Debug logging: config load, script exec, API calls |
 | `--version` | — | Print the build version |
 

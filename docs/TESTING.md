@@ -106,6 +106,25 @@ Every script test asserts at minimum:
 - **Visual:** Playwright screenshot snapshots on the design-system page, both
   themes, to catch unintended regressions.
 
+## The onboarding job
+
+`.github/workflows/onboarding.yaml` runs the new-user path on a fresh Ubuntu
+runner, on every PR that touches it and nightly: the checkout stands in for a
+learner's clone. It builds a release snapshot with goreleaser, runs the clone's
+`./install.sh` against it, and runs `labctl doctor`, `labctl init` and a
+scenario from the home directory, so labctl must find the clone install.sh
+recorded.
+macOS and WSL2 cannot run there, so
+[R14](runbooks/R14-fresh-machine-onboarding.md) covers them by hand.
+
+## Release acceptance
+
+Before a release merges, [release acceptance](release-acceptance.md) walks the
+live lab on the developer's machine as a learner: `scripts/release-acceptance.sh`
+runs the same journey every time, and a walk of the branch's own changes
+covers what is new. Its harness contract is pinned by
+`src/test/shell/release_acceptance.bats`.
+
 ## The nightly real-cluster e2e
 
 Layers 1–4 are hermetic and run on every PR in minutes. Reality is checked once

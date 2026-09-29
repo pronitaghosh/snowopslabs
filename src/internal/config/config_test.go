@@ -277,8 +277,8 @@ func TestLoad_Defaults(t *testing.T) {
 	if cfg.ClusterName != "snowops" {
 		t.Errorf("ClusterName: got %q, want %q", cfg.ClusterName, "snowops")
 	}
-	if cfg.DomainSuffix != "k3d.local" {
-		t.Errorf("DomainSuffix: got %q, want %q", cfg.DomainSuffix, "k3d.local")
+	if cfg.DomainSuffix != "snowops.localhost" {
+		t.Errorf("DomainSuffix: got %q, want %q", cfg.DomainSuffix, "snowops.localhost")
 	}
 	if cfg.MonitoringNamespace != "monitoring" {
 		t.Errorf("MonitoringNamespace: got %q, want %q", cfg.MonitoringNamespace, "monitoring")
@@ -420,8 +420,11 @@ func TestMergeEnvFile_QuotedValueReachesConfig(t *testing.T) {
 
 // clearConfigEnv unsets the config keys for the duration of a test so file/real
 // env precedence can be asserted deterministically. t.Setenv restores them.
+// labctl's state moves to an empty temp dir too, so the ports and domain
+// recorded for a real lab on this machine never leak into the result.
 func clearConfigEnv(t *testing.T) {
 	t.Helper()
+	t.Setenv("SNOWOPS_HOME", t.TempDir())
 	for _, k := range []string{
 		"PROFILE", "CLUSTER_NAME", "DOMAIN_SUFFIX", "HTTP_PORT", "HTTPS_PORT",
 		"INGRESS_CLASS", "STORAGE_CLASS", "REGISTRY_TYPE", "MONITORING_NAMESPACE",
@@ -454,5 +457,350 @@ func TestLoad_MonitoringNamespaceOverride(t *testing.T) {
 	}
 	if cfg.MonitoringNamespace != "observability" {
 		t.Errorf("MonitoringNamespace: got %q, want %q", cfg.MonitoringNamespace, "observability")
+	}
+}
+
+// labRoot makes a minimal project with a k3d profile and the given .env.
+func labRoot(t *testing.T, dotenv string) string {
+	t.Helper()
+	root := t.TempDir()
+	for _, d := range []string{"scenarios", "runtimes/k3d"} {
+		if err := os.MkdirAll(filepath.Join(root, d), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(root, ".env"), []byte(dotenv), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return root
+}
+
+func TestRecordedPortsFollowTheCluster(t *testing.T) {
+	for _, k := range []string{"HTTP_PORT", "HTTPS_PORT", "CLUSTER_NAME", "PROFILE", "DOMAIN_SUFFIX"} {
+		t.Setenv(k, "")
+	}
+	home := t.TempDir()
+	t.Setenv("SNOWOPS_HOME", home)
+	root := labRoot(t, "HTTP_PORT=80\nCLUSTER_NAME=lab\n")
+
+	t.Run("no record keeps .env", func(t *testing.T) {
+		cfg, err := Load(root)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := cfg.IngressURL("grafana"); got != "http://grafana.lab.localhost" {
+			t.Errorf("IngressURL = %q", got)
+		}
+	})
+
+	if err := os.MkdirAll(filepath.Join(home, "clusters"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	rec := "HTTP_PORT=8080\nHTTPS_PORT=8443\n"
+	if err := os.WriteFile(filepath.Join(home, "clusters", "lab.env"), []byte(rec), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Run("the runtime's record beats .env", func(t *testing.T) {
+		cfg, err := Load(root)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if cfg.HTTPPort != "8080" || cfg.HTTPSPort != "8443" {
+			t.Errorf("ports = %s/%s, want 8080/8443", cfg.HTTPPort, cfg.HTTPSPort)
+		}
+		if got := cfg.IngressURLSuffix(); got != "lab.localhost:8080" {
+			t.Errorf("IngressURLSuffix = %q", got)
+		}
+		if got := cfg.IngressURL("grafana"); got != "http://grafana.lab.localhost:8080" {
+			t.Errorf("IngressURL = %q", got)
+		}
+		if cfg.ScriptEnv["HTTP_PORT"] != "8080" {
+			t.Errorf("scripts must see the recorded port, got %q", cfg.ScriptEnv["HTTP_PORT"])
+		}
+	})
+
+	t.Run("a lab keeps the suffix it was built with", func(t *testing.T) {
+		old := "HTTP_PORT=8080\nHTTPS_PORT=8443\nDOMAIN_SUFFIX=k3d.local\n"
+		if err := os.WriteFile(filepath.Join(home, "clusters", "lab.env"), []byte(old), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		cfg, err := Load(root)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := cfg.IngressURL("grafana"); got != "http://grafana.k3d.local:8080" {
+			t.Errorf("IngressURL = %q", got)
+		}
+		if cfg.ScriptEnv["DOMAIN_SUFFIX"] != "k3d.local" {
+			t.Errorf("scripts must see the recorded suffix, got %q", cfg.ScriptEnv["DOMAIN_SUFFIX"])
+		}
+	})
+
+	t.Run("a real environment variable still wins", func(t *testing.T) {
+		t.Setenv("HTTP_PORT", "9090")
+		cfg, err := Load(root)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if cfg.HTTPPort != "9090" {
+			t.Errorf("HTTPPort = %q, want 9090", cfg.HTTPPort)
+		}
+	})
+}
+
+func TestLocalIngress(t *testing.T) {
+	for profile, want := range map[string]bool{"k3d": true, "kind": true, "incluster": false} {
+		if got := (&Config{Profile: profile}).LocalIngress(); got != want {
+			t.Errorf("%s: LocalIngress = %v, want %v", profile, got, want)
+		}
+	}
+}
+
+func TestHome(t *testing.T) {
+	tests := []struct {
+		name        string
+		snowopsHome string
+		home        string
+		expected    string
+	}{
+		{name: "snowops_home wins", snowopsHome: "/srv/lab", home: "/home/me", expected: "/srv/lab"},
+		{name: "defaults under the home directory", home: "/home/me", expected: filepath.Join("/home/me", ".snowops")},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("SNOWOPS_HOME", tt.snowopsHome)
+			t.Setenv("HOME", tt.home)
+			got, err := Home()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got != tt.expected {
+				t.Errorf("Home() = %q, want %q", got, tt.expected)
+			}
+		})
+	}
+}
+
+// makeLab creates a directory that looks like a clone: scenarios/ and runtimes/.
+func makeLab(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	for _, d := range []string{"scenarios", "runtimes"} {
+		if err := os.MkdirAll(filepath.Join(dir, d), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return dir
+}
+
+func TestConfig_ResolvesLocally(t *testing.T) {
+	tests := []struct {
+		name     string
+		suffix   string
+		expected bool
+	}{
+		{name: "per-cluster localhost", suffix: "snowops.localhost", expected: true},
+		{name: "bare localhost", suffix: "localhost", expected: true},
+		{name: "a .local suffix", suffix: "k3d.local", expected: false},
+		{name: "a name that only contains localhost", suffix: "mylocalhost", expected: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := (&Config{DomainSuffix: tt.suffix}).ResolvesLocally(); got != tt.expected {
+				t.Errorf("ResolvesLocally(%q) = %v, want %v", tt.suffix, got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestFindProjectRoot(t *testing.T) {
+	cwdLab, envLab, recorded := makeLab(t), makeLab(t), makeLab(t)
+	outside := t.TempDir()
+	tests := []struct {
+		name     string
+		cwd      string
+		env      string
+		record   string
+		expected string
+		wantErr  string
+	}{
+		{name: "the clone around the working directory wins", cwd: filepath.Join(cwdLab, "scenarios"), env: envLab, record: recorded, expected: cwdLab},
+		{name: "snowops_lab_dir outside a clone", cwd: outside, env: envLab, record: recorded, expected: envLab},
+		{name: "the recorded clone", cwd: outside, record: recorded, expected: recorded},
+		{name: "snowops_lab_dir that is not a clone", cwd: outside, env: outside, wantErr: "is not a snowopslabs clone"},
+		{name: "a recorded clone that is gone", cwd: outside, record: filepath.Join(outside, "deleted"), wantErr: "is gone"},
+		{name: "nothing to find", cwd: outside, wantErr: "could not find your lab"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			home := t.TempDir()
+			t.Setenv("SNOWOPS_HOME", home)
+			t.Setenv("SNOWOPS_LAB_DIR", tt.env)
+			if tt.record != "" {
+				if err := os.WriteFile(filepath.Join(home, "lab-dir"), []byte(tt.record+"\n"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			t.Chdir(tt.cwd)
+
+			got, err := findProjectRoot()
+			if tt.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+					t.Fatalf("err = %v, want %q", err, tt.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got != tt.expected {
+				t.Errorf("findProjectRoot = %q, want %q", got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestLabVersion(t *testing.T) {
+	tests := []struct {
+		name     string
+		file     string
+		expected string
+	}{
+		{name: "release", file: "1.5.0\n", expected: "1.5.0"},
+		{name: "no lab_version file", expected: ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			root := t.TempDir()
+			if tt.file != "" {
+				if err := os.WriteFile(filepath.Join(root, "LAB_VERSION"), []byte(tt.file), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if got := LabVersion(root); got != tt.expected {
+				t.Errorf("LabVersion = %q, want %q", got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestStateDir(t *testing.T) {
+	t.Setenv("SNOWOPS_HOME", "/srv/snowops")
+	got, err := StateDir("lab")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := filepath.Join("/srv/snowops", "state", "lab"); got != want {
+		t.Errorf("StateDir = %q, want %q", got, want)
+	}
+}
+
+func TestMigrateState(t *testing.T) {
+	tests := []struct {
+		name       string
+		legacy     bool
+		target     bool
+		wantMoved  bool
+		wantErr    string
+		wantMarker string // where the legacy marker file must end up
+	}{
+		{name: "moves legacy state once", legacy: true, wantMoved: true, wantMarker: "target"},
+		{name: "nothing to move", target: true},
+		{name: "both exist", legacy: true, target: true, wantErr: "lab state is in both", wantMarker: "legacy"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			base := t.TempDir()
+			legacy := filepath.Join(base, "clone", ".labctl")
+			target := filepath.Join(base, "home", "state", "snowops")
+			if tt.legacy {
+				if err := os.MkdirAll(legacy, 0o755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(filepath.Join(legacy, "marker"), []byte("x"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if tt.target {
+				if err := os.MkdirAll(target, 0o755); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			moved, err := MigrateState(legacy, target)
+			if tt.wantErr == "" && err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if tt.wantErr != "" && (err == nil || !strings.Contains(err.Error(), tt.wantErr)) {
+				t.Fatalf("err = %v, want %q", err, tt.wantErr)
+			}
+			if moved != tt.wantMoved {
+				t.Errorf("moved = %v, want %v", moved, tt.wantMoved)
+			}
+			switch tt.wantMarker {
+			case "target":
+				if _, err := os.Stat(filepath.Join(target, "marker")); err != nil {
+					t.Errorf("state not in target: %v", err)
+				}
+			case "legacy":
+				if _, err := os.Stat(filepath.Join(legacy, "marker")); err != nil {
+					t.Errorf("legacy state touched: %v", err)
+				}
+			}
+		})
+	}
+}
+
+// Only a suffix the user set, in the environment or .env, pins the lab to it;
+// one from runtime.env or the cluster record is a default labctl may move.
+func TestLoad_DomainSuffixPinned(t *testing.T) {
+	tests := []struct {
+		name       string
+		env        string
+		dotEnv     string
+		runtimeEnv string
+		record     string
+		want       bool
+	}{
+		{name: "nothing set"},
+		{name: "set in .env", dotEnv: "DOMAIN_SUFFIX=k3d.local\n", want: true},
+		{name: "set in the environment", env: "k3d.local", want: true},
+		{name: "only in runtime.env", runtimeEnv: "DOMAIN_SUFFIX=k3d.local\n"},
+		{name: "only in the cluster record", record: "DOMAIN_SUFFIX=k3d.local\n"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			clearConfigEnv(t)
+			if tt.env != "" {
+				t.Setenv("DOMAIN_SUFFIX", tt.env)
+			}
+			root := t.TempDir()
+			write := func(path, body string) {
+				t.Helper()
+				if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			write(filepath.Join(root, "runtimes", "k3d", "runtime.env"), tt.runtimeEnv)
+			write(filepath.Join(root, ".env"), tt.dotEnv)
+			if tt.record != "" {
+				file, err := ClusterStateFile("snowops")
+				if err != nil {
+					t.Fatal(err)
+				}
+				write(file, tt.record)
+			}
+			cfg, err := Load(root)
+			if err != nil {
+				t.Fatalf("Load: %v", err)
+			}
+			if cfg.DomainSuffixPinned != tt.want {
+				t.Errorf("DomainSuffixPinned = %v, want %v", cfg.DomainSuffixPinned, tt.want)
+			}
+		})
 	}
 }

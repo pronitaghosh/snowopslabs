@@ -23,7 +23,7 @@ var (
 var usersCmd = &cobra.Command{
 	Use:   "users",
 	Short: "Manage API/UI users for team mode (requires LABCTL_AUTH=true to take effect)",
-	Long: `Manage the static users file (.labctl/users.yaml) used when authentication
+	Long: `Manage the static users file (~/.snowops/state/<cluster>/users.yaml) used when authentication
 is enabled (LABCTL_AUTH=true). Passwords are stored as PBKDF2-HMAC-SHA256
 hashes — never in plain text.
 
@@ -53,7 +53,7 @@ var usersAddCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		path := auth.DefaultUsersPath(cfg.ProjectRoot)
+		path := auth.DefaultUsersPath(cfg.StateDir)
 		uf, err := auth.LoadUsersFile(path)
 		if err != nil {
 			return err
@@ -77,7 +77,7 @@ var usersListCmd = &cobra.Command{
 	Short: "List users and their roles (never prints password hashes)",
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		path := auth.DefaultUsersPath(cfg.ProjectRoot)
+		path := auth.DefaultUsersPath(cfg.StateDir)
 		uf, err := auth.LoadUsersFile(path)
 		if err != nil {
 			return err
@@ -101,7 +101,7 @@ var usersRemoveCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		name := args[0]
-		path := auth.DefaultUsersPath(cfg.ProjectRoot)
+		path := auth.DefaultUsersPath(cfg.StateDir)
 		uf, err := auth.LoadUsersFile(path)
 		if err != nil {
 			return err

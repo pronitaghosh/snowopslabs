@@ -79,7 +79,7 @@ Edit `values.yaml` to customize:
 | `image.tag` | latest | Docker image tag |
 | `port` | 8080 | Application port |
 | `ingress.enabled` | true | Enable ingress |
-| `ingress.hosts[0].host` | go-api.k3d.local | Ingress hostname |
+| `ingress.hosts[0].host` | go-api.snowops.localhost | Ingress hostname |
 | `autoscaling.enabled` | true | Enable HPA |
 | `autoscaling.minReplicas` | 2 | Minimum pod replicas |
 | `autoscaling.maxReplicas` | 5 | Maximum pod replicas |
@@ -124,17 +124,11 @@ helm install go-api apps/go-api/deploy/helm/go-api -f custom-values.yaml
 
 ### Via Ingress (Recommended)
 
-Add to your `/etc/hosts`:
-
+`*.localhost` resolves to this machine, so no hosts entry is needed:
 ```
-127.0.0.1 go-api.k3d.local
-```
-
-Then access via:
-```
-http://go-api.k3d.local/health
-http://go-api.k3d.local/ready
-http://go-api.k3d.local/metrics
+http://go-api.snowops.localhost/health
+http://go-api.snowops.localhost/ready
+http://go-api.snowops.localhost/metrics
 ```
 
 ### Via Port Forward

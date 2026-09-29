@@ -10,6 +10,10 @@ prerequisites:
     - monitoring/metrics
   apps:
     - "{{.WorkloadName}}"
+# Memory for this scenario's own workloads; shared releases, platform
+# components and apps are counted from config/footprints.yaml.
+requirements:
+  memory: 100Mi
 runtimes:
   - k3d
   - kind
@@ -113,7 +117,7 @@ checks:
     operator: "!="
     value: "v1.0.0"
     pending: true
-    remediation: "Build a newer image and promote it through to prod: bash scenarios/env-promotion/scripts/build-image.sh v1.1.0 --app {{.WorkloadName}} --namespace {{.WorkloadNamespace}} && kubectl -n env-dev set image deployment/{{.WorkloadName}} {{.WorkloadName}}={{.WorkloadName}}:v1.1.0 && kubectl -n env-dev rollout status deployment/{{.WorkloadName}} (then repeat for env-staging and env-prod, updating each env-metadata declared_tag to v1.1.0)."
+    remediation: "Build a newer image and promote it through to prod: bash {{.ProjectRoot}}/scenarios/env-promotion/scripts/build-image.sh v1.1.0 --app {{.WorkloadName}} --namespace {{.WorkloadNamespace}} && kubectl -n env-dev set image deployment/{{.WorkloadName}} {{.WorkloadName}}={{.WorkloadName}}:v1.1.0 && kubectl -n env-dev rollout status deployment/{{.WorkloadName}} (then repeat for env-staging and env-prod, updating each env-metadata declared_tag to v1.1.0)."
 
   # Objective 5 was previously only a suggestion in explore. It is graded here on
   # the one thing a rollback leaves behind that rolling forward cannot: prod
@@ -152,26 +156,24 @@ snippets:
 explore:
   urls:
     - label: "Grafana — the pipeline: which tag each env asked for, and whether it landed"
-      url: "http://grafana.{{.DomainSuffix}}/d/env-promotion"
+      url: "http://grafana.{{.IngressURLSuffix}}/d/env-promotion"
     - label: "{{.WorkloadName}} /version — dev environment"
-      url: "http://{{.WorkloadName}}-dev.{{.DomainSuffix}}/version"
+      url: "http://{{.WorkloadName}}-dev.{{.IngressURLSuffix}}/version"
     - label: "{{.WorkloadName}} /version — staging environment"
-      url: "http://{{.WorkloadName}}-staging.{{.DomainSuffix}}/version"
+      url: "http://{{.WorkloadName}}-staging.{{.IngressURLSuffix}}/version"
     - label: "{{.WorkloadName}} /version — prod environment"
-      url: "http://{{.WorkloadName}}-prod.{{.DomainSuffix}}/version"
+      url: "http://{{.WorkloadName}}-prod.{{.IngressURLSuffix}}/version"
   commands:
-    - label: "0. Add the three environment hostnames to /etc/hosts (asks for sudo)"
-      command: "labctl hosts add"
     - label: "1. Baseline check — all three envs serve the SAME version (v1.0.0)"
-      command: "for e in dev staging prod; do echo -n \"$e: \"; curl -s {{.WorkloadName}}-$e.{{.DomainSuffix}}/version; echo; done"
+      command: "for e in dev staging prod; do echo -n \"$e: \"; curl -s http://{{.WorkloadName}}-$e.{{.IngressURLSuffix}}/version; echo; done"
     - label: "2. Make a code change you can SEE: make a visible change in the workload's source under apps/{{.WorkloadName}}/ (go-api exposes `releaseNote` in main.go)"
       command: "grep -rn 'releaseNote' apps/{{.WorkloadName}}/ 2>/dev/null || echo 'this workload has no releaseNote — change any user-visible string, then rebuild'"
     - label: "3. Build the new version and load it into the cluster (this is 'docker build + push')"
-      command: "bash scenarios/env-promotion/scripts/build-image.sh v1.1.0 --app {{.WorkloadName}} --namespace {{.WorkloadNamespace}}"
+      command: "bash {{.ProjectRoot}}/scenarios/env-promotion/scripts/build-image.sh v1.1.0 --app {{.WorkloadName}} --namespace {{.WorkloadNamespace}}"
     - label: "4. Deploy to DEV ONLY — a real rollout (new ReplicaSet), then record the declared tag"
       command: "kubectl -n env-dev set image deployment/{{.WorkloadName}} {{.WorkloadName}}={{.WorkloadName}}:v1.1.0 && kubectl -n env-dev rollout status deployment/{{.WorkloadName}} && kubectl -n env-dev patch cm env-metadata --type=merge -p '{\"data\":{\"declared_tag\":\"v1.1.0\"}}'"
     - label: "5. Prove dev changed and staging/prod did NOT — this is what the promote command actually moves"
-      command: "for e in dev staging prod; do echo -n \"$e: \"; curl -s {{.WorkloadName}}-$e.{{.DomainSuffix}}/version; echo; done"
+      command: "for e in dev staging prod; do echo -n \"$e: \"; curl -s http://{{.WorkloadName}}-$e.{{.IngressURLSuffix}}/version; echo; done"
     - label: "6. Promote dev → STAGING (same image, forward one environment)"
       command: "kubectl -n env-staging set image deployment/{{.WorkloadName}} {{.WorkloadName}}={{.WorkloadName}}:v1.1.0 && kubectl -n env-staging rollout status deployment/{{.WorkloadName}} && kubectl -n env-staging patch cm env-metadata --type=merge -p '{\"data\":{\"declared_tag\":\"v1.1.0\",\"promoted_from\":\"dev\"}}'"
     - label: "7. Promote staging → PROD (release to production)"

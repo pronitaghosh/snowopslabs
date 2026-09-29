@@ -12,6 +12,8 @@ CLI_BIN     := $(BIN_DIR)/labctl
 CLI_PKG     := ./cmd/labctl
 CLI_UI_SRC  := ui/dist
 CLI_UI_DEST := internal/webui/dist
+# LAB_ROOT is the clone this module lives in; cli-install records it as the lab.
+LAB_ROOT    := $(abspath $(CURDIR)/..)
 
 # Release targets. Every one is cgo-free (ADR-0002) so cross-compilation is a
 # plain GOOS/GOARCH change.
@@ -60,11 +62,21 @@ cli-build-all: ui-build
 	done
 	@echo "Cross-compiled binaries in dist/"
 
-## cli-install: build and copy labctl onto PATH
+## cli-install: build labctl and install it over the copy install.sh put on PATH
+# It goes where install.sh installs (SNOWOPS_BIN_DIR, default ~/.local/bin),
+# because labctl puts that directory first on PATH for the tools it runs. Like
+# install.sh it records this clone as the lab, so labctl finds it from anywhere.
 cli-install: cli-build
-	@dest="$${GOBIN:-$$(go env GOPATH)/bin}"; \
-	  mkdir -p "$$dest" && cp $(CLI_BIN) "$$dest/labctl" && \
-	  echo "Installed $$dest/labctl"
+	@dest="$${SNOWOPS_BIN_DIR:-$$HOME/.local/bin}"; \
+	  state="$${SNOWOPS_HOME:-$$HOME/.snowops}"; \
+	  mkdir -p "$$dest" "$$state" && cp $(CLI_BIN) "$$dest/labctl" && \
+	  echo "Installed $$dest/labctl" && \
+	  printf '%s\n' "$(LAB_ROOT)" >"$$state/lab-dir" && \
+	  echo "Recorded the lab at $(LAB_ROOT)" && \
+	  found="$$(command -v labctl || true)"; \
+	  if [ "$$found" != "$$dest/labctl" ]; then \
+	    echo "Warning: 'labctl' on PATH is $${found:-missing}, not $$dest/labctl; put $$dest first on PATH."; \
+	  fi
 
 cli-clean:
 	@rm -f $(CLI_BIN) coverage.out coverage.html

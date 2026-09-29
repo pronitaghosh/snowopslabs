@@ -29,7 +29,7 @@ func newTrafficServer(t *testing.T) *Server {
 			t.Fatal(err)
 		}
 	}
-	return &Server{cfg: &config.Config{ProjectRoot: root}}
+	return &Server{cfg: &config.Config{ProjectRoot: root, StateDir: filepath.Join(root, ".labctl")}}
 }
 
 func TestHandleTrafficInfo_ListsProfiles(t *testing.T) {

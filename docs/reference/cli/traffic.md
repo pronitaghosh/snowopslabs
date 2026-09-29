@@ -15,7 +15,7 @@ labctl traffic start                                # steady 10 rps for 10m agai
 labctl traffic start --app echo-server --rps 25     # the same against echo-server, in-cluster
 labctl traffic start --profile spike --rps 20       # 20 rps baseline, 200 rps spike
 labctl traffic start --profile soak --duration 4h
-labctl traffic start --target http://echo-server.k3d.local/ --rps 50
+labctl traffic start --target http://echo-server.snowops.localhost/ --rps 50
 ```
 
 | Flag | Default | Meaning |

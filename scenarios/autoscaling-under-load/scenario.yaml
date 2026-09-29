@@ -16,6 +16,10 @@ prerequisites:
   # app's own request rate, so an app with no request histogram cannot drive it.
   capabilities:
     - prometheus-metrics
+# Memory for this scenario's own workloads; shared releases, platform
+# components and apps are counted from config/footprints.yaml.
+requirements:
+  memory: 300Mi
 runtimes:
   - k3d
   - kind
@@ -161,9 +165,9 @@ snippets:
 explore:
   urls:
     - label: "Grafana — Autoscaling dashboard (replicas vs RPS)"
-      url: "http://grafana.{{.DomainSuffix}}/d/autoscaling-under-load"
+      url: "http://grafana.{{.IngressURLSuffix}}/d/autoscaling-under-load"
     - label: "Prometheus"
-      url: "http://prometheus.{{.DomainSuffix}}"
+      url: "http://prometheus.{{.IngressURLSuffix}}"
   commands:
     - label: "1. Apply the autoscaler yourself — the snippet marked 'You apply this'"
       command: "labctl scenario info autoscaling-under-load   # copy the ScaledObject, then: kubectl apply -f -"

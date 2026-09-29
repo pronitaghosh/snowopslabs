@@ -44,7 +44,7 @@ ingress:
   ingressAnnotations:
     traefik.ingress.kubernetes.io/router.entrypoints: web
   hosts:
-    - host: echo-server.k3d.local
+    - host: echo-server.snowops.localhost
       paths:
         - path: /
           pathType: Prefix

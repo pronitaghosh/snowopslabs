@@ -3,9 +3,12 @@
 package cli
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/sagar2395/snowopslabs/internal/platform"
@@ -24,7 +27,7 @@ func writeProvider(t *testing.T, root, relDir string) {
 	}
 }
 
-func TestPrereqNamespaces(t *testing.T) {
+func TestPrereqProviders(t *testing.T) {
 	root := t.TempDir()
 	writeProvider(t, root, "cost/opencost")                 // category/provider
 	writeProvider(t, root, "monitoring/metrics/prometheus") // sub-category with a provider
@@ -33,26 +36,81 @@ func TestPrereqNamespaces(t *testing.T) {
 	reg := platform.NewRegistry(root)
 
 	tests := []struct {
-		name   string
-		prereq string
-		want   []string
+		name     string
+		prereq   string
+		expected []string
 	}{
-		{"category/provider resolves to provider namespace", "cost/opencost", []string{"opencost"}},
-		{"sub-category resolves to shared monitoring namespace", "monitoring/metrics", []string{"monitoring"}},
-		{"bare category resolves to every provider namespace", "ingress", []string{"nginx", "traefik"}},
-		{"unknown prereq resolves to nothing", "does/not/exist", nil},
+		{name: "category/provider resolves to that provider", prereq: "cost/opencost", expected: []string{"opencost"}},
+		{name: "sub-category resolves to its provider", prereq: "monitoring/metrics", expected: []string{"prometheus"}},
+		{name: "bare category resolves to every provider", prereq: "ingress", expected: []string{"nginx", "traefik"}},
+		{name: "unknown prereq resolves to nothing", prereq: "does/not/exist", expected: []string{}},
 	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			got := prereqNamespaces(reg, tc.prereq)
-			sort.Strings(got)
-			sort.Strings(tc.want)
-			if len(got) != len(tc.want) {
-				t.Fatalf("prereqNamespaces(%q) = %v, want %v", tc.prereq, got, tc.want)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := []string{}
+			for _, p := range prereqProviders(reg, tt.prereq) {
+				got = append(got, p.Name)
 			}
-			for i := range got {
-				if got[i] != tc.want[i] {
-					t.Fatalf("prereqNamespaces(%q) = %v, want %v", tc.prereq, got, tc.want)
+			sort.Strings(got)
+			if !slices.Equal(got, tt.expected) {
+				t.Errorf("prereqProviders(%q) = %v, want %v", tt.prereq, got, tt.expected)
+			}
+		})
+	}
+}
+
+// stubKubectl puts a fake kubectl first on PATH that answers `get namespace`
+// successfully only for the namespaces listed.
+func stubKubectl(t *testing.T, namespaces ...string) {
+	t.Helper()
+	dir := t.TempDir()
+	var script strings.Builder
+	script.WriteString("#!/bin/sh\ncase \"$*\" in\n")
+	for _, ns := range namespaces {
+		script.WriteString("  \"get namespace " + ns + " --no-headers\") exit 0 ;;\n")
+	}
+	script.WriteString("esac\nexit 1\n")
+	if err := os.WriteFile(filepath.Join(dir, "kubectl"), []byte(script.String()), 0o755); err != nil { //nolint:gosec // test stub must be executable
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+}
+
+func TestEnsurePlatformPrereqs(t *testing.T) {
+	root := t.TempDir()
+	writeProvider(t, root, "cost/opencost")
+	oldReg := reg
+	t.Cleanup(func() { reg = oldReg })
+	reg = platform.NewRegistry(root)
+
+	tests := []struct {
+		name      string
+		installed []string
+		prereqs   []string
+		wantErr   []string
+	}{
+		{name: "installed", installed: []string{"opencost"}, prereqs: []string{"cost/opencost"}},
+		{
+			name:    "missing is an error with the install command",
+			prereqs: []string{"cost/opencost"},
+			wantErr: []string{"not installed: cost/opencost", "labctl platform up cost/opencost", "--deploy-prereqs"},
+		},
+		{name: "unknown to the registry is left to preflight", prereqs: []string{"does/not/exist"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			stubKubectl(t, tt.installed...)
+			var out bytes.Buffer
+			err := ensurePlatformPrereqs(t.Context(), &out, tt.prereqs, false)
+			if len(tt.wantErr) == 0 {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				return
+			}
+			for _, want := range tt.wantErr {
+				if err == nil || !strings.Contains(err.Error(), want) {
+					t.Errorf("error should mention %q, got %v", want, err)
 				}
 			}
 		})

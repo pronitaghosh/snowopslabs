@@ -14,7 +14,7 @@ set -euo pipefail
 #   VAULT_DEV_ROOT_TOKEN  dev root token (default: root — the well-known dev default)
 #   VAULT_DEMO_SECRET     demo KV value seeded at secret/<workload> (default: demo value)
 #   INGRESS_CLASS         ingress class for the UI route (default: traefik)
-#   DOMAIN_SUFFIX         host suffix for the UI route (default: k3d.local)
+#   DOMAIN_SUFFIX         host suffix for the UI route (default: <cluster>.localhost)
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 NAMESPACE="vault"
@@ -22,7 +22,7 @@ CHART_VERSION="${VAULT_CHART_VERSION:-0.28.1}"
 ROOT_TOKEN="${VAULT_DEV_ROOT_TOKEN:-root}"
 DEMO_SECRET="${VAULT_DEMO_SECRET:-s3cr3t-from-vault-v1}"
 INGRESS_CLASS="${INGRESS_CLASS:-traefik}"
-DOMAIN_SUFFIX="${DOMAIN_SUFFIX:-k3d.local}"
+DOMAIN_SUFFIX="${DOMAIN_SUFFIX:-${CLUSTER_NAME:-snowops}.localhost}"
 
 echo "Installing HashiCorp Vault ${CHART_VERSION} (dev mode, namespace=${NAMESPACE})..."
 
@@ -71,7 +71,7 @@ EOF
 
 echo ""
 echo "Vault installed successfully (dev mode)."
-echo "    UI:   http://vault.${DOMAIN_SUFFIX}  (token auth — use your dev root token)"
+echo "    UI:   http://vault.${INGRESS_URL_SUFFIX:-${DOMAIN_SUFFIX:-${CLUSTER_NAME:-snowops}.localhost}}  (token auth — use your dev root token)"
 echo "    Addr (in-cluster): http://vault.${NAMESPACE}.svc:8200"
 echo "    Demo secret: secret/${WORKLOAD_NAME:-go-api} (key: api-key)"
 echo "    Next: install external-secrets to sync it into the go-api namespace."

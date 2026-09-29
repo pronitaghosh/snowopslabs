@@ -59,16 +59,36 @@ func browserCommands(goos string, wsl bool, url string) [][]string {
 	return nil
 }
 
-// wslDoctorNotes returns the WSL guidance `labctl doctor` prints. A Windows
-// browser resolves ingress hostnames with the Windows hosts file, so `labctl
-// hosts add` inside WSL is not enough on its own.
-func wslDoctorNotes() []string {
-	return []string{
-		"WSL detected. The web UI (labctl ui, http://localhost:3939) works as-is via WSL2 localhost forwarding.",
-		"Ingress hostnames (e.g. http://grafana.k3d.local) opened in a Windows browser use the WINDOWS hosts file,",
-		"  not WSL's /etc/hosts. Add the same entries to C:\\Windows\\System32\\drivers\\etc\\hosts (as Administrator),",
-		"  or reach services from inside WSL (curl) where 'labctl hosts add' applies.",
-		"If WSL keeps overwriting /etc/hosts on restart, set 'generateHosts=false' under [network] in /etc/wsl.conf.",
-		"Ensure Docker Desktop's WSL integration is enabled for this distro (or run a native docker daemon in WSL).",
+// wslDoctorNotes returns the WSL guidance `labctl doctor` prints. WSL2
+// forwards Windows' localhost ports into the distro, and a Windows browser
+// resolves *.localhost itself; any other suffix needs the Windows hosts file,
+// which `labctl hosts add` inside WSL does not touch. Each note is one bullet;
+// a note that wraps continues on an indented line.
+func wslDoctorNotes(labDir, suffix string, resolvesLocally bool) []string {
+	notes := []string{
+		"The web UI (labctl ui, http://localhost:3939) opens in your Windows browser as is.",
 	}
+	if resolvesLocally {
+		notes = append(notes,
+			"Lab URLs (e.g. http://grafana."+suffix+") open in your Windows browser too: it resolves\n"+
+				"    *.localhost to Windows' own localhost, which WSL2 forwards into the distro. No hosts-file edits.")
+	} else {
+		notes = append(notes,
+			"Ingress hostnames (e.g. http://grafana."+suffix+") opened in a Windows browser use the WINDOWS hosts file,\n"+
+				"    not WSL's /etc/hosts. Add the same entries to C:\\Windows\\System32\\drivers\\etc\\hosts (as Administrator),\n"+
+				"    or reach services from inside WSL (curl) where 'labctl hosts add' applies.",
+			"If WSL keeps overwriting /etc/hosts on restart, set 'generateHosts=false' under [network] in /etc/wsl.conf.")
+	}
+	notes = append(notes,
+		"Docker's memory comes from WSL: set memory= and processors= under [wsl2] in %UserProfile%\\.wslconfig.",
+		"Closing every WSL terminal stops WSL after a short idle time, and the lab with it.\n"+
+			"    Keep one terminal open while you work; 'labctl init' brings the lab back afterwards.")
+	// Windows drives are mounted over a slow 9p bridge and may check files out
+	// with CRLF line endings, which breaks every shell script in the lab.
+	if strings.HasPrefix(labDir, "/mnt/") {
+		notes = append(notes,
+			"The lab is under "+labDir+", a Windows drive. Clone it on the Linux filesystem\n"+
+				"    (e.g. cd ~ && git clone ...): it is much faster there and scripts keep their LF line endings.")
+	}
+	return notes
 }

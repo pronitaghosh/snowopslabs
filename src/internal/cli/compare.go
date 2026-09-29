@@ -29,7 +29,7 @@ var compareOpts struct {
 }
 
 func compareStore() *compare.Store {
-	return compare.NewStore(filepath.Join(cfg.ProjectRoot, ".labctl", "history"))
+	return compare.NewStore(filepath.Join(cfg.StateDir, "history"))
 }
 
 // cliLab implements compare.Lab using the same engines as the scenario and

@@ -31,7 +31,7 @@ echo "Ingress:"
 kubectl get ingress -n "$NAMESPACE" 2>/dev/null || echo "  (none — use port-forward to access the UI)"
 echo ""
 
-DOMAIN="${DOMAIN_SUFFIX:-k3d.local}"
+DOMAIN="${DOMAIN_SUFFIX:-${CLUSTER_NAME:-snowops}.localhost}"
 echo "Access:"
 echo "  http://opencost.${DOMAIN}  (if ingress is installed)"
 echo "  kubectl -n ${NAMESPACE} port-forward svc/opencost 9090 &"

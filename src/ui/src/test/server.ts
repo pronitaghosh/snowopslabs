@@ -24,6 +24,9 @@ export const handlers = [
       platform: [],
     }),
   ),
+  http.get(`${API}/capacity`, () =>
+    HttpResponse.json({ cpus: 2, memoryMiB: 3905, usedMiB: 2000, usableMiB: 3319 }),
+  ),
   http.get(`${API}/runtimes`, () =>
     HttpResponse.json([{ name: 'k3d', active: true, current: true }]),
   ),

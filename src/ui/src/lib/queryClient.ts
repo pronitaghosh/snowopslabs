@@ -32,6 +32,7 @@ export const queryClient = new QueryClient({
 // can never drift apart on a stringly-typed key.
 export const qk = {
   status: ['status'] as const,
+  capacity: ['capacity'] as const,
   dashboards: ['dashboards'] as const,
   apps: ['apps'] as const,
   platform: ['platform'] as const,

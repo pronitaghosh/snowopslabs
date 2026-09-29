@@ -45,5 +45,5 @@ echo "PENDING: no chaos experiment has been seen in ${NS}." >&2
 echo "  Put load on the service first — an experiment against an idle service proves nothing:" >&2
 echo "    labctl traffic start --app ${WORKLOAD_NAME} --profile browse --rps 20 --duration 30m" >&2
 echo "  Then inject exactly one failure and watch the blast radius:" >&2
-echo "    bash scenarios/chaos-engineering/scripts/inject.sh pod-kill --app ${WORKLOAD_NAME} --namespace ${WORKLOAD_NAMESPACE}" >&2
+echo "    bash ${PROJECT_ROOT:-.}/scenarios/chaos-engineering/scripts/inject.sh pod-kill --app ${WORKLOAD_NAME} --namespace ${WORKLOAD_NAMESPACE}" >&2
 exit 1

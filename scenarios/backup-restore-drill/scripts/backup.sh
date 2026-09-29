@@ -10,10 +10,12 @@ set -euo pipefail
 # data. For stateful data use a volume snapshot or Velero with restic.
 #
 # Env:
-#   BACKUP_DIR  where archives are written (default: .labctl/backups)
+#   BACKUP_DIR  where archives are written (default: <lab state dir>/backups)
 #   RESOURCES   comma-separated kinds to capture (default: a sensible app set)
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# The clone this script belongs to, for the commands it prints.
+LAB_ROOT="${PROJECT_ROOT:-$(cd "$SCRIPT_DIR/../../.." && pwd)}"
 # shellcheck source=scripts/_backup_lib.sh
 . "${SCRIPT_DIR}/_backup_lib.sh"
 
@@ -101,4 +103,4 @@ if [ -n "$BOOT_ID" ]; then
 fi
 
 echo ""
-echo "Restore with: bash scenarios/backup-restore-drill/scripts/restore.sh ${NS}"
+echo "Restore with: bash ${LAB_ROOT}/scenarios/backup-restore-drill/scripts/restore.sh ${NS}"

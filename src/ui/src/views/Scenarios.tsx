@@ -4,6 +4,7 @@ import { qk } from '../lib/queryClient'
 import { useApiQuery } from '../hooks/useApiQuery'
 import type { Scenario, ScenarioParameter, ScenarioCheck, ScenarioVerifyResult, NotifyFn } from '../types'
 import { Badge } from '../components/Badge'
+import { requirementLabels } from '../lib/requirements'
 import { ErrorState } from '../components/ErrorState'
 import { Icon } from '../components/Icon'
 import { Tabs, type TabItem } from '../components/Tabs'
@@ -259,6 +260,9 @@ export function Scenarios({ notify, requestConfirm }: ScenariosProps) {
                       {(s.runtimes || []).map(r => (
                         <Badge key={r} variant="runtime">{r}</Badge>
                       ))}
+                      {requirementLabels(s.requirements).map(label => (
+                        <Badge key={label} variant="pending">{label}</Badge>
+                      ))}
                     </div>
                   </div>
                   <Badge variant={s.active ? 'running' : 'stopped'}>{s.active ? 'Active' : 'Inactive'}</Badge>
@@ -374,6 +378,7 @@ function ScenarioDetailTabs({ detail, verifyResult, onCopy, notify }: {
   // from the binding is shown as what it runs against, below.
   const prereqApps = detail.pinnedApps ?? []
   const prereqCaps = detail.prerequisites?.capabilities ?? []
+  const needs = requirementLabels(detail.requirements)
   const bound = detail.workload
   const urls = detail.explore?.urls ?? []
   const commands = detail.explore?.commands ?? []
@@ -415,13 +420,14 @@ function ScenarioDetailTabs({ detail, verifyResult, onCopy, notify }: {
           </div>
         )}
 
-        {(prereqPlatform.length > 0 || prereqApps.length > 0 || prereqCaps.length > 0) && (
+        {(prereqPlatform.length > 0 || prereqApps.length > 0 || prereqCaps.length > 0 || needs.length > 0) && (
           <div className="modal-section">
             <h3>Prerequisites</h3>
             <div className="prereq-chips">
               {prereqPlatform.map(p => <Badge key={`p-${p}`} variant="category">Platform: {p}</Badge>)}
               {prereqApps.map(a => <Badge key={`a-${a}`} variant="category">App: {a}</Badge>)}
               {prereqCaps.map(c => <Badge key={`c-${c}`} variant="category">Needs: {c}</Badge>)}
+              {needs.map(n => <Badge key={`r-${n}`} variant="pending">{n}</Badge>)}
             </div>
           </div>
         )}

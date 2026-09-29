@@ -104,7 +104,7 @@ changes show as queueing at a constant arrival rate. See runbook
 [R13](runbooks/R13-observability-pipeline.md) for the end-to-end validation.
 
 **Explore after activation:**
-- Golden Signals dashboard: `http://grafana.k3d.local/d/observability-sre`
+- Golden Signals dashboard: `http://grafana.snowops.localhost/d/observability-sre`
 - Explore > Loki > `{namespace="<workload-ns>"} | json` — expand a line, click its `trace_id`
 - Explore > Tempo > search by `service.name`
 - Check alerts: Prometheus > Alerts, or `kubectl -n monitoring get prometheusrules`
@@ -148,7 +148,7 @@ repair the deliberately-broken release — in Git, because `kubectl set image` i
 reverted within seconds.
 
 **Explore after activation:**
-- Open the ArgoCD dashboard at `http://argocd.k3d.local` (admin / the password
+- Open the ArgoCD dashboard at `http://argocd.snowops.localhost` (admin / the password
   from `kubectl -n argocd get secret argocd-initial-admin-secret`)
 - `kubectl -n gitops port-forward svc/git-server 9418:9418`, then
   `git clone git://127.0.0.1:9418/platform.git`
@@ -221,7 +221,7 @@ go-api's own next rollout — which is exactly why Audit mode exists.
 **Explore after activation:**
 - `labctl scenario info security-compliance` — twelve numbered commands walk the
   whole drill
-- Security dashboard at `http://grafana.k3d.local/d/security-compliance`
+- Security dashboard at `http://grafana.snowops.localhost/d/security-compliance`
 - Prove isolation: a pod in another namespace gets HTTP 000, while the ingress
   path still returns 200
 
@@ -302,8 +302,8 @@ pod-kill at one replica takes the request rate to **zero** for about ten
 seconds; at three replicas the rate never leaves the floor.
 
 **Explore after activation:**
-- Chaos dashboard at `http://grafana.k3d.local/d/chaos-engineering`
-- Chaos Mesh UI at `http://chaos.k3d.local`
+- Chaos dashboard at `http://grafana.snowops.localhost/d/chaos-engineering`
+- Chaos Mesh UI at `http://chaos.snowops.localhost`
 - Load with `labctl traffic start --app <app> --profile browse --rps 20` — never a curl loop
 - Run one experiment: `bash scenarios/chaos-engineering/scripts/inject.sh pod-kill --app <app> --namespace <namespace>`
   (with no argument it lists what is available)
@@ -822,7 +822,7 @@ something live state alone cannot see:
   contain.
 - Simulate loss: `kubectl -n <workload-ns> delete configmap restore-marker`
 - **Verify while it is lost** — that run is what grades the loss
-- Restore: `kubectl apply --server-side --force-conflicts -f .labctl/backups/<workload-ns>-latest.json`
+- Restore: `kubectl apply --server-side --force-conflicts -f ~/.snowops/state/<cluster>/backups/<workload-ns>-latest.json`
 - Then the hard half: `kubectl -n <workload-ns> delete deploy data-writer &&
   kubectl -n <workload-ns> delete pvc restore-data`, restore again, and run
   `observe-pv-data.sh` — the `boot-id` changed.
@@ -908,9 +908,8 @@ about sizing requests correctly.
    checks report **pending**
 2. `labctl traffic start --profile steady --rps 25` — without load the peak is
    meaningless and the floor cannot bite
-3. Read the gap on `http://grafana.k3d.local/d/cost-right-sizing`, and the cost in
-   the OpenCost UI at `http://opencost.k3d.local` (`labctl hosts add` once;
-   otherwise `kubectl -n opencost port-forward svc/opencost 9090 &`)
+3. Read the gap on `http://grafana.snowops.localhost/d/cost-right-sizing`, and the cost in
+   the OpenCost UI at `http://opencost.snowops.localhost`
 4. Right-size above the observed peak and under the ceiling:
    `kubectl -n <workload-ns> set resources deployment <workload> --requests=cpu=<peak+headroom>,memory=<peak+headroom>`
 5. `labctl scenario verify cost-right-sizing` — all checks **pass**

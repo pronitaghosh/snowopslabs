@@ -94,6 +94,9 @@ a reproducible pick across a team.`,
 			return err
 		}
 
+		if err := ensurePlatformPrereqs(cmd.Context(), os.Stdout, f.Prerequisites.Platform, injectDeployPrereqs); err != nil {
+			return err
+		}
 		// If the fault's target is a repo app, check it is deployed first (or
 		// deploy it with --deploy-prereqs).
 		if appExists(f.Target.Namespace) {
@@ -359,7 +362,7 @@ var incidentInfoCmd = &cobra.Command{
 
 func init() {
 	incidentSolutionCmd.Flags().BoolVar(&solutionYes, "yes", false, "skip the spoiler confirmation")
-	incidentInjectCmd.Flags().BoolVar(&injectDeployPrereqs, "deploy-prereqs", false, "build and deploy the target app if it is not already running")
+	incidentInjectCmd.Flags().BoolVar(&injectDeployPrereqs, "deploy-prereqs", false, "install the platform components the fault needs and build and deploy the target app, if they are not already running")
 	incidentInjectCmd.Flags().BoolVar(&injectRandom, "random", false, "pick a random eligible fault")
 	incidentInjectCmd.Flags().BoolVar(&injectSilent, "silent", false, "don't reveal which fault was injected")
 	incidentInjectCmd.Flags().BoolVar(&injectForce, "force", false, "inject even if another incident is active")

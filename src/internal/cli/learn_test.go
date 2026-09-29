@@ -5,6 +5,8 @@ package cli
 import (
 	"testing"
 
+	"github.com/sagar2395/snowopslabs/internal/config"
+	"github.com/sagar2395/snowopslabs/internal/incident"
 	"github.com/sagar2395/snowopslabs/internal/learn"
 )
 
@@ -40,11 +42,35 @@ func TestChecksCheckHTTP(t *testing.T) {
 		URL:          "http://go-api.${DOMAIN_SUFFIX:-k3d.local}/health",
 		ExpectStatus: 200,
 	}
-	got := checksCheck(c, "/tmp", "k3d.local")
+	got := checksCheck(c, "/tmp", func(s string) string { return expandVars(s, "k3d.local") })
 	if got.URL != "http://go-api.k3d.local/health" {
 		t.Errorf("URL = %q, want expanded", got.URL)
 	}
 	if got.ExpectStatus != 200 {
 		t.Errorf("ExpectStatus = %d, want 200", got.ExpectStatus)
+	}
+}
+
+func TestLearnResolver(t *testing.T) {
+	oldCfg, oldInc := cfg, incEng
+	t.Cleanup(func() { cfg, incEng = oldCfg, oldInc })
+	cfg = &config.Config{DomainSuffix: "lab.localhost", HTTPPort: "8080"}
+	incEng = incident.NewEngine(t.TempDir(), "lab.localhost")
+	incEng.IngressURLSuffix = cfg.IngressURLSuffix()
+
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{name: "a template carries the port", input: "http://go-api.{{.IngressURLSuffix}}/health", expected: "http://go-api.lab.localhost:8080/health"},
+		{name: "an environment variable still expands", input: "http://go-api.${DOMAIN_SUFFIX}/health", expected: "http://go-api.lab.localhost/health"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := learnResolver()(tt.input); got != tt.expected {
+				t.Errorf("resolve(%q) = %q, want %q", tt.input, got, tt.expected)
+			}
+		})
 	}
 }

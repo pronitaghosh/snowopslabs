@@ -47,7 +47,7 @@ func TestParseAfterCursor(t *testing.T) {
 // (id: <seq> / event: action / data: <json>), so an EventSource resumes cleanly.
 func TestStreamSSE_ReplaysFromCursor(t *testing.T) {
 	exec := executor.New(t.TempDir())
-	s := &Server{exec: exec, cfg: &config.Config{ProjectRoot: t.TempDir()}}
+	s := &Server{exec: exec, cfg: &config.Config{ProjectRoot: t.TempDir(), StateDir: t.TempDir()}}
 	s.setupRoutes()
 	ts := httptest.NewServer(s.router)
 	defer ts.Close()
@@ -113,7 +113,7 @@ func TestStreamSSE_ReplaysFromCursor(t *testing.T) {
 // silently starting mid-history.
 func TestStreamSSE_ResyncWhenCursorTooOld(t *testing.T) {
 	exec := executor.New(t.TempDir())
-	s := &Server{exec: exec, cfg: &config.Config{ProjectRoot: t.TempDir()}}
+	s := &Server{exec: exec, cfg: &config.Config{ProjectRoot: t.TempDir(), StateDir: t.TempDir()}}
 	s.setupRoutes()
 	ts := httptest.NewServer(s.router)
 	defer ts.Close()

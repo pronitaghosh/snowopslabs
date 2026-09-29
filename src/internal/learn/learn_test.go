@@ -5,6 +5,7 @@ package learn
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -256,6 +257,24 @@ func TestIntroText(t *testing.T) {
 		t.Fatalf("IntroText: %v", err)
 	}
 	if text != "# Hello Module" {
+		t.Errorf("intro text = %q", text)
+	}
+}
+
+func TestIntroText_Expanded(t *testing.T) {
+	e, learnDir := makeEngine(t)
+	writePathYAML(t, learnDir, "test-path", validPathYAML)
+	writeIntro(t, learnDir, "test-path", "intros/01.md", "curl http://go-api.{{.IngressURLSuffix}}/health")
+	e.Expand = func(in string) string {
+		return strings.ReplaceAll(in, "{{.IngressURLSuffix}}", "snowops.localhost:8080")
+	}
+
+	p, _ := e.LoadPath("test-path")
+	text, err := e.IntroText(p, p.Modules[0])
+	if err != nil {
+		t.Fatalf("IntroText: %v", err)
+	}
+	if text != "curl http://go-api.snowops.localhost:8080/health" {
 		t.Errorf("intro text = %q", text)
 	}
 }

@@ -3,8 +3,11 @@
 package toolchain
 
 import (
+	"bufio"
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -335,4 +338,43 @@ func TestRequirements(t *testing.T) {
 			}
 		}
 	})
+}
+
+// TestMinimumsMatchVersionsEnv checks that doctor's minimum versions equal the
+// *_MIN_VERSION values setup-tools reads from config/versions.env, so both
+// agree on what "new enough" means.
+func TestMinimumsMatchVersionsEnv(t *testing.T) {
+	f, err := os.Open(filepath.Join("..", "..", "..", "config", "versions.env"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = f.Close() })
+	env := map[string]string{}
+	sc := bufio.NewScanner(f)
+	for sc.Scan() {
+		k, v, ok := strings.Cut(strings.TrimSpace(sc.Text()), "=")
+		if ok && !strings.HasPrefix(k, "#") {
+			env[k] = v
+		}
+	}
+
+	keys := map[string]string{
+		"kubectl": "KUBECTL_MIN_VERSION",
+		"helm":    "HELM_MIN_VERSION",
+		"k3d":     "K3D_MIN_VERSION",
+		"kind":    "KIND_MIN_VERSION",
+	}
+	for _, req := range Requirements() {
+		key, ok := keys[req.Binary]
+		if !ok {
+			continue
+		}
+		delete(keys, req.Binary)
+		if env[key] != req.MinVersion {
+			t.Errorf("%s: preflight minimum %q, versions.env %s=%q", req.Binary, req.MinVersion, key, env[key])
+		}
+	}
+	for bin := range keys {
+		t.Errorf("%s has a minimum in versions.env but no preflight requirement", bin)
+	}
 }

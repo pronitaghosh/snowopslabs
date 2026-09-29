@@ -22,7 +22,7 @@ if [ -n "${REMAINING// /}" ]; then
   printf '  %s\n' ${REMAINING} >&2
   echo "  Roll each of them, one at a time — cordon, drain, then replace:" >&2
   echo "    kubectl cordon <node> && kubectl drain <node> --ignore-daemonsets --delete-emptydir-data" >&2
-  echo "    TARGET_K3S_VERSION=<tag> bash scenarios/cluster-upgrade-drill/scripts/roll-node.sh <node>" >&2
+  echo "    TARGET_K3S_VERSION=<tag> bash ${PROJECT_ROOT:-.}/scenarios/cluster-upgrade-drill/scripts/roll-node.sh <node>" >&2
   exit 1
 fi
 

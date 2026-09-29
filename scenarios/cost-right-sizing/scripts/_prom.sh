@@ -8,8 +8,8 @@
 # metrics-server is briefly unavailable to a pod that has just rolled, which is
 # exactly the moment the learner re-runs verify after right-sizing.
 
-DOMAIN_SUFFIX="${DOMAIN_SUFFIX:-k3d.local}"
-PROMETHEUS_URL="${PROMETHEUS_URL:-http://prometheus.${DOMAIN_SUFFIX}}"
+DOMAIN_SUFFIX="${DOMAIN_SUFFIX:-${CLUSTER_NAME:-snowops}.localhost}"
+PROMETHEUS_URL="${PROMETHEUS_URL:-http://prometheus.${INGRESS_URL_SUFFIX:-${DOMAIN_SUFFIX:-${CLUSTER_NAME:-snowops}.localhost}}}"
 USAGE_WINDOW="${USAGE_WINDOW:-15m}"
 
 # prom_scalar <query> — prints the first sample's value, or nothing.

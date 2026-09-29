@@ -4,7 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # DOMAIN_SUFFIX and INGRESS_CLASS are provided by the executor environment.
-DOMAIN_SUFFIX="${DOMAIN_SUFFIX:-k3d.local}"
+DOMAIN_SUFFIX="${DOMAIN_SUFFIX:-${CLUSTER_NAME:-snowops}.localhost}"
 INGRESS_CLASS="${INGRESS_CLASS:-traefik}"
 
 NAMESPACE="kubernetes-dashboard"
