@@ -359,14 +359,25 @@ func NamespaceHealth(ctx context.Context, namespace string) (ready, total int, e
 	if err != nil {
 		return 0, 0, true
 	}
+	ready, total = podHealth(pods)
+	return ready, total, true
+}
+
+// podHealth counts pods and how many of them are fully ready. A Failed pod,
+// such as one evicted while the cluster was stopped, is left out: its
+// controller has replaced it, and the replacement is counted instead.
+func podHealth(pods []PodInfo) (ready, total int) {
 	for _, p := range pods {
+		if p.Status == "Failed" {
+			continue
+		}
 		total++
-		// A finished Job pod is not unhealthy, so it is not counted.
+		// A finished Job pod is not unhealthy, so it counts as ready.
 		if p.Status == "Succeeded" || (p.Status == "Running" && allContainersReady(p.Ready)) {
 			ready++
 		}
 	}
-	return ready, total, true
+	return ready, total
 }
 
 // allContainersReady parses the "n/m" readiness string PodInfo carries.

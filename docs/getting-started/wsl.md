@@ -37,7 +37,7 @@ What `init` tells you, and what to do:
 | Message | Do this |
 |---|---|
 | Docker Desktop is not enabled for this WSL distro | Docker Desktop → Settings → Resources → WSL Integration → enable your distro, Apply & Restart, reopen the terminal. |
-| Docker Desktop (or Rancher Desktop) is installed on Windows but not running | Start it on Windows, then reopen the terminal and run `labctl init` again. labctl will not install a second Docker engine next to it. |
+| Docker Desktop (or Rancher Desktop) is installed on Windows but not running | Start it on Windows, then reopen the terminal and run `labctl init` again. labctl will not install a second Docker engine next to it unless you ask: to use Docker Engine inside the distro instead, keep the Windows app stopped (or uninstall it) and run `SNOWOPS_NATIVE_DOCKER=1 labctl init`. |
 | added to the docker group | Run `wsl --shutdown` in PowerShell, reopen the terminal, run `labctl init` again. |
 | WSL is running without systemd | Docker will not start by itself. Add `[boot]` and `systemd=true` to `/etc/wsl.conf`, then `wsl --shutdown`; or run `sudo service docker start` in each session. |
 

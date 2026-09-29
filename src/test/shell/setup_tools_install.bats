@@ -166,7 +166,25 @@ EOF
   WSL_DISTRO_NAME=Ubuntu run setup_tools Linux without_docker_cli install_docker_linux
   [ "$status" -eq 1 ]
   [[ "$output" == *"Docker Desktop is installed on Windows but not running"* ]]
+  [[ "$output" == *"SNOWOPS_NATIVE_DOCKER=1 labctl init"* ]]
   ! grep -q "sudo" "$CALLS" 2>/dev/null
+}
+
+@test "WSL: SNOWOPS_NATIVE_DOCKER=1 installs Docker Engine beside a stopped Docker Desktop" {
+  export WINDOWS_PROGRAM_FILES="$STUB_DIR/pf"
+  mkdir -p "$WINDOWS_PROGRAM_FILES/Docker/Docker"
+  touch "$WINDOWS_PROGRAM_FILES/Docker/Docker/Docker Desktop.exe"
+  printf '#!/usr/bin/env bash\nexit 1\n' >"$STUB_BIN/docker"
+  chmod +x "$STUB_BIN/docker"
+  # No docker CLI, and a distro whose install is a single recorded command.
+  native_engine() {
+    docker_cli_missing() { return 0; }
+    _linux_distro() { echo alpine; }
+    "$@"
+  }
+  SNOWOPS_NATIVE_DOCKER=1 WSL_DISTRO_NAME=Ubuntu run setup_tools Linux native_engine install_docker_linux
+  [[ "$output" != *"is installed on Windows but not running"* ]]
+  grep -q "sudo apk add --no-cache docker" "$CALLS"
 }
 
 @test "linux: a stale docker-group session is explained, not waited on" {

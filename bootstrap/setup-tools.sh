@@ -339,11 +339,14 @@ install_docker_linux() {
   fi
   # On WSL, Docker Desktop or Rancher Desktop that is merely stopped looks like
   # "no docker at all" from inside the distro: its CLI shim disappears too.
+  # SNOWOPS_NATIVE_DOCKER=1 installs Docker Engine in the distro regardless.
   local app
-  if is_wsl && docker_cli_missing && app="$(windows_docker_app)"; then
+  if is_wsl && [ "${SNOWOPS_NATIVE_DOCKER:-}" != "1" ] && docker_cli_missing && app="$(windows_docker_app)"; then
     echo -e "${RED}ERROR: ${app} is installed on Windows but not running.${NC}" >&2
     echo "  Start ${app}, make sure its WSL Integration is enabled for '${WSL_DISTRO_NAME:-this distro}'," >&2
     echo "  then reopen this terminal and re-run 'labctl init'." >&2
+    echo "  To use Docker Engine inside this distro instead, keep ${app} stopped (or uninstall it)" >&2
+    echo "  and run: SNOWOPS_NATIVE_DOCKER=1 labctl init" >&2
     exit 1
   fi
   if command -v docker &>/dev/null && is_wsl; then
