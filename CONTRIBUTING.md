@@ -113,7 +113,7 @@ config/                   versions.env, footprints.yaml, .env.example
 docs/                     PRODUCT, ROADMAP, TESTING, architecture/, adr/, runbooks/
 install.sh                installs the labctl release that matches LAB_VERSION
 LAB_VERSION               the release this checkout belongs to (-dev on main)
-scripts/                  footprint measurement, docs checks
+scripts/                  footprint measurement, docs checks, release
 
 # The labctl Go module — self-contained under src/
 src/cmd/labctl/           entrypoint
