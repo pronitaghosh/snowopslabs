@@ -74,8 +74,12 @@ The step-by-step version follows.
 
 ## Release steps (maintainer)
 
-1. Ensure `main` is green (the full CI suite, including the `release-config` job
-   that runs `goreleaser check` and a snapshot build).
+1. Before merging the release branch, accept it on a live lab: the
+   [release acceptance](docs/release-acceptance.md) journey
+   (`scripts/release-acceptance.sh`) plus a walk of the branch's own changes,
+   or the `release-acceptance` skill, which runs both. Then ensure `main` is
+   green (the full CI suite, including the `release-config` job that runs
+   `goreleaser check` and a snapshot build).
 2. Dry-run locally to sanity-check the artifacts (nothing is published):
 
    ```bash
