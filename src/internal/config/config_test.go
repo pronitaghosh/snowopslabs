@@ -5,8 +5,11 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/sagar2395/snowopslabs/internal/workload"
 )
 
 // findProjectRoot must find a checkout that has no Makefile, by looking for
@@ -168,6 +171,228 @@ func TestLoadAppConfig_NotFound(t *testing.T) {
 	_, err := LoadAppConfig(root, "nonexistent")
 	if err == nil {
 		t.Error("expected error for missing app config")
+	}
+}
+
+// LoadAppConfig reads app.env with the same dotenv parser the rest of the
+// package uses (quoted values, inline "# comments", missing keys).
+func TestLoadAppConfig_EnvParsing(t *testing.T) {
+	tests := []struct {
+		name   string
+		appEnv string
+		check  func(t *testing.T, cfg *AppConfig)
+	}{
+		{
+			name: "quoted values",
+			appEnv: `APP_NAME="quoted-app"
+BUILD_STRATEGY='docker'
+DEPLOY_STRATEGY="helm"
+HELM_RELEASE_NAME=quoted-app
+HELM_VALUES="values-dev.yaml" # trailing comment after quotes
+`,
+			check: func(t *testing.T, cfg *AppConfig) {
+				t.Helper()
+				if cfg.AppName != "quoted-app" {
+					t.Errorf("AppName: got %q, want %q", cfg.AppName, "quoted-app")
+				}
+				if cfg.BuildStrategy != "docker" {
+					t.Errorf("BuildStrategy: got %q, want %q", cfg.BuildStrategy, "docker")
+				}
+				if cfg.DeployStrategy != "helm" {
+					t.Errorf("DeployStrategy: got %q, want %q", cfg.DeployStrategy, "helm")
+				}
+				if cfg.HelmValues != "values-dev.yaml" {
+					t.Errorf("HelmValues: got %q, want %q", cfg.HelmValues, "values-dev.yaml")
+				}
+			},
+		},
+		{
+			name: "quoted value keeps a literal hash",
+			appEnv: `APP_NAME=test-app
+BUILD_STRATEGY=docker
+DEPLOY_STRATEGY=helm
+HELM_RELEASE_NAME="rel#1"
+`,
+			check: func(t *testing.T, cfg *AppConfig) {
+				t.Helper()
+				if cfg.HelmRelease != "rel#1" {
+					t.Errorf("HelmRelease: got %q, want %q", cfg.HelmRelease, "rel#1")
+				}
+			},
+		},
+		{
+			name: "inline comments are stripped",
+			appEnv: `# leading comment
+APP_NAME=go-api                    # Must match parent directory name
+BUILD_STRATEGY=docker              # docker, golang, binary, lambda-zip, etc.
+DEPLOY_STRATEGY=helm               # helm, kustomize, lambda, vm, etc.
+HELM_RELEASE_NAME=go-api           # Release name in cluster
+HELM_VALUES=values-dev.yaml        # Values file
+# NAMESPACE=go-api                 # K8s namespace (defaults to APP_NAME if unset)
+`,
+			check: func(t *testing.T, cfg *AppConfig) {
+				t.Helper()
+				if cfg.AppName != "go-api" {
+					t.Errorf("AppName: got %q, want %q", cfg.AppName, "go-api")
+				}
+				if cfg.BuildStrategy != "docker" {
+					t.Errorf("BuildStrategy: got %q, want %q", cfg.BuildStrategy, "docker")
+				}
+				if cfg.HelmValues != "values-dev.yaml" {
+					t.Errorf("HelmValues: got %q, want %q", cfg.HelmValues, "values-dev.yaml")
+				}
+			},
+		},
+		{
+			name: "missing keys are empty",
+			appEnv: `APP_NAME=bare-app
+`,
+			check: func(t *testing.T, cfg *AppConfig) {
+				t.Helper()
+				if cfg.AppName != "bare-app" {
+					t.Errorf("AppName: got %q, want %q", cfg.AppName, "bare-app")
+				}
+				for _, kv := range []struct {
+					key, val string
+				}{
+					{"BuildStrategy", cfg.BuildStrategy},
+					{"DeployStrategy", cfg.DeployStrategy},
+					{"HelmRelease", cfg.HelmRelease},
+					{"HelmValues", cfg.HelmValues},
+					{"Namespace", cfg.Namespace},
+				} {
+					if kv.val != "" {
+						t.Errorf("%s: got %q, want empty", kv.key, kv.val)
+					}
+				}
+			},
+		},
+		{
+			name: "contract fields",
+			appEnv: `APP_NAME=contract-app
+BUILD_STRATEGY=docker
+DEPLOY_STRATEGY=helm
+APP_PORT=9090
+APP_HEALTH_PATH=/live
+APP_READY_PATH=/readyz
+APP_METRICS_PATH=/prom
+APP_REQUEST_METRIC=my_request_seconds
+APP_CAPABILITIES=prometheus-metrics,readiness-toggle
+`,
+			check: func(t *testing.T, cfg *AppConfig) {
+				t.Helper()
+				c := cfg.Contract
+				if c.Port != "9090" {
+					t.Errorf("Contract.Port: got %q, want %q", c.Port, "9090")
+				}
+				if c.HealthPath != "/live" {
+					t.Errorf("Contract.HealthPath: got %q, want %q", c.HealthPath, "/live")
+				}
+				if c.ReadyPath != "/readyz" {
+					t.Errorf("Contract.ReadyPath: got %q, want %q", c.ReadyPath, "/readyz")
+				}
+				if c.MetricsPath != "/prom" {
+					t.Errorf("Contract.MetricsPath: got %q, want %q", c.MetricsPath, "/prom")
+				}
+				if c.RequestMetric != "my_request_seconds" {
+					t.Errorf("Contract.RequestMetric: got %q, want %q", c.RequestMetric, "my_request_seconds")
+				}
+				if len(c.Capabilities) != 2 {
+					t.Errorf("Contract.Capabilities: got %v, want 2 entries", c.Capabilities)
+				}
+			},
+		},
+		{
+			name: "contract fields fall back to defaults when absent",
+			appEnv: `APP_NAME=defaults-app
+`,
+			check: func(t *testing.T, cfg *AppConfig) {
+				t.Helper()
+				c := cfg.Contract
+				if c.Port != workload.DefaultPort {
+					t.Errorf("Contract.Port: got %q, want default %q", c.Port, workload.DefaultPort)
+				}
+				if c.HealthPath != workload.DefaultHealthPath {
+					t.Errorf("Contract.HealthPath: got %q, want default %q", c.HealthPath, workload.DefaultHealthPath)
+				}
+				if len(c.Capabilities) != 0 {
+					t.Errorf("Contract.Capabilities: got %v, want none", c.Capabilities)
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			root := t.TempDir()
+			appDir := filepath.Join(root, "apps", "test-app")
+			if err := os.MkdirAll(appDir, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(appDir, "app.env"), []byte(tt.appEnv), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			cfg, err := LoadAppConfig(root, "test-app")
+			if err != nil {
+				t.Fatalf("LoadAppConfig: %v", err)
+			}
+			tt.check(t, cfg)
+		})
+	}
+}
+
+// Every app.env shipped in the repo must load to the config its fields
+// declare, including keys that are missing entirely (e.g. HELM_VALUES in
+// java-api, NAMESPACE everywhere).
+func TestLoadAppConfig_ShippedApps(t *testing.T) {
+	_, thisFile, _, _ := runtime.Caller(0)
+	repoRoot := filepath.Join(filepath.Dir(thisFile), "..", "..", "..")
+
+	apps, err := ListApps(repoRoot)
+	if err != nil {
+		t.Fatalf("ListApps: %v", err)
+	}
+	if len(apps) == 0 {
+		t.Fatal("no apps found under apps/")
+	}
+
+	want := map[string]AppConfig{
+		"go-api": {
+			AppName: "go-api", BuildStrategy: "docker", DeployStrategy: "helm",
+			HelmRelease: "go-api", HelmValues: "values-dev.yaml", Namespace: "",
+		},
+		"echo-server": {
+			AppName: "echo-server", BuildStrategy: "docker", DeployStrategy: "helm",
+			HelmRelease: "echo-server", HelmValues: "values-dev.yaml", Namespace: "",
+		},
+		"java-api": {
+			AppName: "java-api", BuildStrategy: "docker", DeployStrategy: "helm",
+			HelmRelease: "java-api", HelmValues: "", Namespace: "",
+		},
+	}
+
+	for _, name := range apps {
+		cfg, err := LoadAppConfig(repoRoot, name)
+		if err != nil {
+			t.Errorf("LoadAppConfig(%s): %v", name, err)
+			continue
+		}
+		w, ok := want[name]
+		if !ok {
+			t.Errorf("app %q is not covered by this test; add its expected config", name)
+			continue
+		}
+		if cfg.AppName != w.AppName || cfg.BuildStrategy != w.BuildStrategy ||
+			cfg.DeployStrategy != w.DeployStrategy || cfg.HelmRelease != w.HelmRelease ||
+			cfg.HelmValues != w.HelmValues || cfg.Namespace != w.Namespace {
+			t.Errorf("LoadAppConfig(%s) = %+v, want %+v", name, cfg, w)
+		}
+		if cfg.Contract.Port != "8080" {
+			t.Errorf("LoadAppConfig(%s) Contract.Port = %q, want %q", name, cfg.Contract.Port, "8080")
+		}
+		if cfg.Contract.RequestMetric != "http_server_request_duration_seconds" {
+			t.Errorf("LoadAppConfig(%s) Contract.RequestMetric = %q", name, cfg.Contract.RequestMetric)
+		}
 	}
 }
 
