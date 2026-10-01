@@ -265,7 +265,7 @@ The errors say what to do. The common ones:
 | `could not find your lab` | Run `./install.sh` in your clone once, or `cd` into it. |
 | `labctl is X but the lab in … is Y` | Run `./install.sh` in your clone. |
 
-Everything else, by symptom: [Troubleshooting](docs/troubleshooting.md).
+Everything else, by symptom: [Troubleshooting](docs/troubleshooting.md) (or [WSL2 Troubleshooting](docs/getting-started/wsl.md#troubleshooting) on Windows).
 
 ## Configuration
 
