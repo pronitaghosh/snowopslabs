@@ -4,6 +4,12 @@
 
 Serves the web dashboard and the REST API, and opens a browser.
 
+On WSL2, where no Linux desktop is present, `ui` opens the URL in the host
+Windows browser by trying openers in order: `wslview` (wslu),
+`powershell.exe -NoProfile -Command Start-Process`, `cmd.exe /c start ""`, and
+finally `xdg-open`. See
+[Getting started on Windows (WSL2)](../../getting-started/wsl.md#opening-the-lab-from-windows).
+
 ```bash
 labctl ui                             # http://127.0.0.1:3939
 labctl ui --port 8080
