@@ -63,6 +63,15 @@ your setup. Exits non-zero when anything required is missing, Docker is not
 running, or Docker is too small, so it is safe as a script gate. A stopped
 colima is only a note: `labctl init` starts it.
 
+On WSL2, `doctor` adds a dedicated **WSL notes** section. It checks whether the
+lab directory is on a Windows mount (any path under `/mnt/`) where 9p bridge
+slowness and CRLF line endings cause issues, reminds that Docker memory comes
+from `%UserProfile%\.wslconfig`, confirms that default `*.localhost` lab URLs
+open in your Windows browser with no hosts-file edits, explains that custom
+domain suffixes require Windows hosts file entries (or `generateHosts=false` in
+`/etc/wsl.conf`), and notes that closing every terminal stops the lab after an
+idle timeout. See [Getting started on Windows (WSL2)](../../getting-started/wsl.md).
+
 ```bash
 labctl doctor
 ```
