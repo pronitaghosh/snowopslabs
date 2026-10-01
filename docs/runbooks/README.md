@@ -39,6 +39,22 @@ and step number. A failing step blocks the wave.
 Runbooks assume the golden path: macOS or Linux, Docker running, `k3d`
 available. Where a step differs between macOS and Linux, both are given.
 
+## Which runbook do I need?
+
+When troubleshooting a symptom or validating a specific subsystem, use this index to find the right runbook:
+
+| Situation / Symptom | Runbook | What it validates |
+|---|---|---|
+| I want to contribute, build `labctl` from source, or run unit tests | [R00 — Environment & build](R00-environment-and-build.md) | Source compilation, toolchain prerequisites, test suite, and lint gates on a fresh clone. |
+| An operation is stuck, needs cancelling, or the server was restarted mid-run | [R01 — Run engine & cancellation](R01-run-engine-and-cancellation.md) | Operation recording, CLI/UI cancellation, child process cleanup (`helm`), and restart recovery. |
+| Tools are missing, outdated, or Docker is stopped / undersized | [R02 — Doctor & preflight](R02-doctor-and-preflight.md) | Preflight tool detection, version threshold enforcement, stopped Docker engine diagnostics, and fix instructions. |
+| I am creating a custom scenario, editing scenario YAML, or testing external content | [R03 — Content authoring & validation](R03-content-authoring-and-validation.md) | Scenario schema validation, file/line error reporting, and loading external content via `SNOWOPS_CONTENT_PATH`. |
+| The cluster fails to start, reboot recovery fails, or I need to test snapshot & restore | [R04 — Lab lifecycle reliability](R04-lab-lifecycle.md) | Idempotent cluster lifecycle, reboot recovery, snapshot save/restore, and clean teardown on k3d. |
+| A platform component fails to install, Helm upgrades fail, or charts conflict | [R05 — Platform components](R05-platform-components.md) | Idempotent platform component installation, Helm upgrade strategies for immutable specs, and service health checks. |
+| I want to practice manual image rollouts and promotion across dev, staging, and prod | [R06 — Multi-env promotion](R06-multi-env-promotion.md) | Multi-namespace delivery pipeline, manual image promotion via `kubectl`, and automated outcome grading. |
+| Dashboards have no data, Loki logs are empty, or traces are missing | [R13 — Observability pipeline](R13-observability-pipeline.md) | End-to-end metrics, logs, and trace telemetry flow for `go-api`, plus Grafana, Loki, and Tempo correlation. |
+| A first-time user is installing a release on fresh macOS or WSL2 | [R14 — Fresh-machine onboarding](R14-fresh-machine-onboarding.md) | First-time user onboarding on fresh macOS and WSL2 following only the public README. |
+
 ## Index
 
 Runbooks are written as their wave is implemented.
@@ -51,7 +67,7 @@ Runbooks are written as their wave is implemented.
 | R03 | [Content authoring & validation](R03-content-authoring-and-validation.md) | W2 | **ready** |
 | R04 | [Lab lifecycle reliability](R04-lab-lifecycle.md) | W3 | **ready** (reliability slice) |
 | R05 | [Platform components](R05-platform-components.md) | W3 | **ready** (durable service slice) |
-| R06 | Scenario loop | W4 | planned |
+| R06 | [Multi-env promotion](R06-multi-env-promotion.md) | W4 | **ready** |
 | R07 | Game day & incidents | W4 | planned |
 | R08 | API & security | W5 | planned |
 | R09 | UI operational walkthrough | W6 | planned |
