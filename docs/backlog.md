@@ -4,7 +4,7 @@ Deferred work that is understood but not yet done. Each item says what is
 wrong, how it was found, the proposed approach, and where to start, so a later
 session can pick one up without re-deriving it.
 
-To pick one up: read the item, read the documents it links, and follow the
+An item marked *Tracked in* has a GitHub issue; discuss it there. To pick one up: read the item, read the documents it links, and follow the
 [definition of done](AGENT-CONTEXT.md#definition-of-done). When it lands, delete
 the item — git history keeps the record.
 
@@ -217,6 +217,8 @@ above.
 
 ## B8 — `scenario down` reports success when its deletes fail
 
+Tracked in [#81](https://github.com/sagar2395/snowopslabs/issues/81).
+
 **Problem.** `Engine.Down` prints an uninstall error as a warning, carries on,
 removes the `.active` marker and returns success. On a lab whose API server was
 timing out, `scenario down event-driven-arch` and `scenario down gitops-cicd`
@@ -354,6 +356,8 @@ memory requests approach the VM's memory.
 
 ## B13 — `scenario.Engine.Get` writes to a shared, cached scenario
 
+Tracked in [#82](https://github.com/sagar2395/snowopslabs/issues/82).
+
 **Problem.** `Get` returns the `*Scenario` held in the engine's cache, but only
 after setting `s.Active` on it. Any two goroutines that call `Get` at the same
 time, or one that calls `Get` while a run reads the scenario, race on that
@@ -370,6 +374,8 @@ shallow copy with `Active` filled in, or drop the field and have callers ask
 ---
 
 ## B14 — Ctrl-C orphans running scripts
+
+Tracked in [#83](https://github.com/sagar2395/snowopslabs/issues/83).
 
 **Problem.** `labctl` never installs a signal handler, so `cmd.Context()` is
 `context.Background()` and Ctrl-C kills the process with Go's default action.
@@ -398,6 +404,8 @@ context, and replace the sleep with a `select` on `ctx.Done()` and a
 ---
 
 ## B15 — Two submits can take the same lock
+
+Tracked in [#84](https://github.com/sagar2395/snowopslabs/issues/84).
 
 **Problem.** `run.(*Engine).Submit` checks `ActiveRunForLock` and then calls
 `CreateRun` as two separate statements. The index on `runs.lock_key` isn't
@@ -445,6 +453,8 @@ run ID, and the UI streams it from `/api/v2/runs/{id}`. Delete
 ---
 
 ## B17 — API request bodies are unbounded
+
+Tracked in [#85](https://github.com/sagar2395/snowopslabs/issues/85).
 
 **Problem.** No handler or middleware limits the request body size.
 `json.NewDecoder(r.Body)` reads whatever arrives. With auth on and
