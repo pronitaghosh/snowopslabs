@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
-	"runtime"
 	"sort"
 	"strings"
 	"testing"
@@ -83,13 +82,7 @@ var yamlFence = regexp.MustCompile("(?s)```yaml\n(.*?)```")
 // data, not fields, and are skipped.
 func documentedFields(t *testing.T, freeMaps map[string]bool) map[string]bool {
 	t.Helper()
-	_, thisFile, _, ok := runtime.Caller(0)
-	if !ok {
-		t.Fatal("cannot determine test file path")
-	}
-	// This file is in src/internal/scenario; the repo root is three levels up.
-	doc := filepath.Join(filepath.Dir(thisFile), "..", "..", "..",
-		"docs", "reference", "scenario-schema.md")
+	doc := filepath.Join(repoRoot(t), "docs", "reference", "scenario-schema.md")
 	data, err := os.ReadFile(doc) //nolint:gosec // test reads the repo's own doc
 	if err != nil {
 		t.Fatalf("reading the scenario schema reference: %v", err)
