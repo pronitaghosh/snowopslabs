@@ -201,10 +201,14 @@ done
 docker restart k3d-snowops-agent-1-0
 ```
 
-**Proposed approach.** Re-apply the limit wherever labctl touches a running
-cluster, not only at creation — `labctl status`, `labctl doctor`, and the start of
-every run-engine operation are candidates. Have `labctl status` report a node
-whose k3s process is gone while its container is up, with the recovery above.
+**Already done.** `labctl init` re-applies the limit on a healthy existing
+cluster (`runtimes/k3d/up.sh` runs `raise_inotify_limits` on both paths), so
+re-running `init` after a VM restart restores it.
+
+**Proposed approach.** Re-apply the limit from `labctl status` and `labctl doctor`
+too, so a learner who never re-runs `init` is covered. Have `labctl status` report
+a node whose k3s process is gone while its container is up, with the recovery
+above.
 
 **Start at.** `runtimes/k3d/up.sh` (`raise_inotify_limits`),
 `src/internal/cli/status.go`, `src/internal/cli/doctor.go`.
@@ -333,12 +337,16 @@ and `scenario down` silently failed its deletes (see
 [B8](#b8--scenario-down-reports-success-when-its-deletes-fail)). Seven scenarios
 active at once is enough to get there.
 
+**Already done.** `labctl init` refuses an undersized Docker engine, and scenario
+and fault activation is admitted only when the lab has room, judged across every
+active scenario (`src/internal/service/admission`). The scheduler still believes
+each node has the whole VM, so pods outside that gate can overcommit it.
+
 **Proposed approach.** Give each node a real share when the cluster is created:
 `--kubelet-arg=system-reserved=memory=…` (or `kube-reserved`) sized so that the
 nodes' allocatable memory sums to what the VM has, computed from `docker info`
 in `runtimes/k3d/up.sh`. Have `labctl doctor` or `labctl status` warn when total
-memory requests approach the VM's memory, and document a memory budget per
-scenario so learners know how many they can run at once.
+memory requests approach the VM's memory.
 
 **Start at.** `runtimes/k3d/up.sh` (`create_cluster`), `src/internal/cli/doctor.go`.
 
