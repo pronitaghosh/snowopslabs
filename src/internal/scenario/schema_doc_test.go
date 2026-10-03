@@ -46,7 +46,7 @@ func schemaTypes() []reflect.Type {
 			walk(t.Elem())
 		}
 	}
-	walk(reflect.TypeOf(pkgscenario.Scenario{}))
+	walk(reflect.TypeFor[pkgscenario.Scenario]())
 	return order
 }
 
@@ -59,7 +59,7 @@ func schemaFields() (fields, freeMaps map[string]bool) {
 	for _, t := range schemaTypes() {
 		for i := range t.NumField() {
 			f := t.Field(i)
-			name := strings.SplitN(f.Tag.Get("yaml"), ",", 2)[0]
+			name, _, _ := strings.Cut(f.Tag.Get("yaml"), ",")
 			if name == "" || name == "-" {
 				continue
 			}
