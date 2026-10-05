@@ -44,15 +44,11 @@ page collects them by symptom. `labctl doctor` checks your machine, and
 
 ## Windows (WSL2)
 
-| Symptom | Fix |
-|---|---|
-| `labctl ui` does not open a browser | Open `http://localhost:3939` in your Windows browser. labctl tries `wslview`, then `powershell.exe`; if WSL interop is off, neither can reach Windows. |
-| `*.k3d.local` hostnames work with `curl` in WSL but not in the Windows browser | The lab was built before URLs moved to `*.localhost`, and a Windows browser reads the Windows hosts file, not WSL's. Run `labctl init`: it moves the lab to `*.localhost` names, which the Windows browser opens with no hosts file at all. |
-| Scripts fail with `$'\r': command not found` | The clone is on a Windows drive, or was made with Git for Windows. Clone again inside WSL, in your Linux home (`cd ~`), with the distro's `git`, then `./install.sh`. |
-| Docker does not start after `wsl --shutdown` | WSL runs without systemd. Enable it in `/etc/wsl.conf` or run `sudo service docker start`. |
-| `Docker Desktop is installed on Windows but not running` (or Rancher Desktop) | Start it on Windows, reopen the terminal, `labctl init`. To use Docker Engine inside WSL instead, keep the Windows app stopped (or uninstall it) and run `SNOWOPS_NATIVE_DOCKER=1 labctl init`. |
-| The lab is unreachable after the laptop slept, or after every WSL terminal was closed | WSL stopped, and the cluster with it. Run `labctl init`. If it still fails, `labctl reset` rebuilds it; it removes the old cluster's containers even when k3d can no longer read them. |
-| The lab is slow or short of memory, and `docker ps` shows `k3d-…` containers of another cluster | An older k3d or kind cluster (from another project, or an older lab name) restarts with Docker and shares WSL's memory. List them with `docker ps --filter name=k3d-` (k3d may not list a half-broken one), and stop what you do not need with `k3d cluster stop <name>`, or `docker stop` on its containers. |
+For a complete troubleshooting guide organized by symptom — covering browser
+launching, DNS resolution (`*.localhost` vs `DOMAIN_SUFFIX=127.0.0.1.nip.io`),
+`/etc/wsl.conf` (`generateHosts`, `systemd`, `interop`), Docker Desktop WSL
+integration, line endings, and idle cluster recovery — see the
+[WSL2 Troubleshooting guide](getting-started/wsl.md#troubleshooting).
 
 ## Still stuck
 

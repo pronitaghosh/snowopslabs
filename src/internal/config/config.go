@@ -13,8 +13,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/spf13/viper"
-
 	"github.com/sagar2395/snowopslabs/internal/workload"
 )
 
@@ -211,19 +209,19 @@ func LoadAppConfig(projectRoot, appName string) (*AppConfig, error) {
 		return nil, fmt.Errorf("app %q exists but has no app.env", appName)
 	}
 
-	v := viper.New()
-	v.SetConfigFile(appEnv)
-	v.SetConfigType("env")
-	if err := v.ReadInConfig(); err != nil {
+	data, err := os.ReadFile(appEnv)
+	if err != nil {
 		return nil, fmt.Errorf("reading app config: %w", err)
 	}
+	vals := make(map[string]string, 16)
+	parseEnvData(vals, data)
 
 	contractVals := make(map[string]string, 6)
 	for _, k := range []string{
 		workload.KeyPort, workload.KeyHealthPath, workload.KeyReadyPath,
 		workload.KeyMetricsPath, workload.KeyRequestMetric, workload.KeyCapabilities,
 	} {
-		contractVals[k] = v.GetString(k)
+		contractVals[k] = vals[k]
 	}
 	contract, err := workload.ParseContract(contractVals)
 	if err != nil {
@@ -231,12 +229,12 @@ func LoadAppConfig(projectRoot, appName string) (*AppConfig, error) {
 	}
 
 	return &AppConfig{
-		AppName:        v.GetString("APP_NAME"),
-		BuildStrategy:  v.GetString("BUILD_STRATEGY"),
-		DeployStrategy: v.GetString("DEPLOY_STRATEGY"),
-		HelmRelease:    v.GetString("HELM_RELEASE_NAME"),
-		HelmValues:     v.GetString("HELM_VALUES"),
-		Namespace:      v.GetString("NAMESPACE"),
+		AppName:        vals["APP_NAME"],
+		BuildStrategy:  vals["BUILD_STRATEGY"],
+		DeployStrategy: vals["DEPLOY_STRATEGY"],
+		HelmRelease:    vals["HELM_RELEASE_NAME"],
+		HelmValues:     vals["HELM_VALUES"],
+		Namespace:      vals["NAMESPACE"],
 		Contract:       contract,
 	}, nil
 }
@@ -395,6 +393,12 @@ func mergeEnvFile(dst map[string]string, path string) {
 	if err != nil {
 		return
 	}
+	parseEnvData(dst, data)
+}
+
+// parseEnvData parses dotenv-style content into dst. Keys already in dst are
+// kept, so the first occurrence wins.
+func parseEnvData(dst map[string]string, data []byte) {
 	for line := range strings.SplitSeq(string(data), "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" || strings.HasPrefix(line, "#") {

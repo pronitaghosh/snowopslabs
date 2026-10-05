@@ -66,7 +66,8 @@ field is added without being wired.
 
 **3. The app contract is declared in `app.env`.** That file is already the
 contract between an app and the build/deploy engine, it is both shell-sourceable
-and viper-readable, and keeping one file per app avoids a second place to look.
+and read by the lab's own dotenv parser, and keeping one file per app avoids a
+second place to look.
 
 | Key | Default | Meaning |
 |---|---|---|

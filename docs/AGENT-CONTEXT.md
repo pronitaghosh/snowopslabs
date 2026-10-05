@@ -60,6 +60,11 @@ names the documents to read, the rules that are easy to break, and a checklist
 to finish against.
 They are a shortcut to the docs, never a replacement: when a skill and a document
 disagree, the document wins and the skill is the bug.
+OpenCode reads the same `.claude/skills/` and `CLAUDE.md` (wired through
+`opencode.json` instructions), so no `.opencode/` copies are needed.
+`AGENTS.md` is the only local agent file: it stays local scaffolding and is git-ignored. Contributors using
+both tools keep the global files aligned with
+`scripts/sync-ai-context.sh [--check]`.
 
 ---
 
