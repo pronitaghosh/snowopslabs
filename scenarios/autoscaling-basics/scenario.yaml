@@ -1,0 +1,174 @@
+# yaml-language-server: $schema=https://labs.snowops.net/schemas/scenario.schema.json
+apiVersion: scenario.snowops.net/v2
+name: autoscaling-basics
+displayName: Autoscaling Basics
+description: "Declare a stock CPU HorizontalPodAutoscaler for {{.WorkloadName}}, drive load with labctl traffic, and watch it scale up and back down on the dashboard."
+category: scalability
+prerequisites:
+  platform:
+    - ingress
+    - monitoring/metrics
+    - monitoring/grafana
+  apps:
+    - "{{.WorkloadName}}"
+  # The error and tail checks read the app's request histogram.
+  capabilities:
+    - prometheus-metrics
+requirements:
+  memory: 100Mi
+runtimes:
+  - k3d
+  - kind
+
+objectives:
+  - "Declare CPU autoscaling for {{.WorkloadName}} with a HorizontalPodAutoscaler"
+  - "Drive load and watch replicas scale up on CPU demand"
+  - "Confirm errors stay flat and the tail did not pull away, then watch it scale back down"
+
+# Tunable knobs — override at activation with
+# `labctl scenario up autoscaling-basics --set MaxReplicas=4 --set CPUTarget=50`
+parameters:
+  - name: MinReplicas
+    displayName: "Minimum replicas"
+    description: "Floor the autoscaler never scales below (idle baseline)."
+    default: "1"
+    type: int
+    min: 1
+    max: 10
+    notGreaterThan: MaxReplicas
+  - name: MaxReplicas
+    displayName: "Maximum replicas"
+    description: "Ceiling the autoscaler never exceeds. Lower it to watch the workload saturate at the cap."
+    default: "4"
+    type: int
+    min: 1
+    max: 10
+  - name: CPUTarget
+    displayName: "CPU target utilization"
+    description: "Average CPU percent per pod the autoscaler holds. Lower reacts more aggressively."
+    default: "60"
+    type: int
+    min: 10
+    max: 95
+  - name: MaxTailAmplification
+    displayName: "Maximum tail amplification (p99 / p50)"
+    description: "How far slow requests may pull away from typical ones before the service counts as saturated. A ratio reads the same for a 2ms Go service and a 200ms JVM."
+    default: "10"
+    type: int
+    min: 2
+    max: 100
+
+stages:
+  # The stage builds the instruments; declaring the HPA is the skill this
+  # scenario teaches, so the learner applies it from the snippet below.
+  - name: instruments
+    description: Install the replicas-vs-load dashboard the drill is read from
+    components:
+      - name: autoscaling-basics-dashboard
+        type: grafana-dashboard
+        path: dashboards/
+        namespace: "{{.MonitoringNamespace}}"
+
+      # Resets the exercise: deletes any leftover HPA on activation for a clean
+      # start, and removes the learner-applied HPA on teardown. Applying the HPA
+      # stays the learner's task — this stage never creates one.
+      - name: reset-hpa
+        type: script
+        script: scripts/delete-hpa.sh
+        uninstallScript: scripts/delete-hpa.sh
+
+checks:
+  # The metric exists once the app is scraped. Probes hit /health and /ready
+  # every few seconds, so this passes without generated traffic and fails only
+  # when the pipeline itself is broken — which is what makes an empty dashboard
+  # fail verify instead of confusing the learner.
+  - name: workload-metric-exists
+    type: promql
+    query: 'sum(rate({{.WorkloadMetric}}_count{app="{{.WorkloadName}}"}[5m]))'
+    operator: ">"
+    value: "0"
+    remediation: "No request series for {{.WorkloadName}} is reaching Prometheus. Check the pod serves /metrics and carries the prometheus.io/scrape annotation: kubectl -n {{.WorkloadNamespace}} get pod -l app={{.WorkloadName}} -o yaml | grep -A3 prometheus.io"
+
+  - name: hpa-present
+    pending: true
+    remediation: "You have not applied the HPA yet — that is the exercise. Copy its apply command from the Implementation tab (marked 'You apply this') and run it."
+    type: kubectl
+    resource: hpa/{{.WorkloadName}}
+    namespace: "{{.WorkloadNamespace}}"
+
+  # "It scaled" means the autoscaler raised its own target above the floor.
+  # The Deployment replica count would also be satisfied by a hand-run
+  # `kubectl scale`, so this reads the HPA status instead.
+  - name: workload-scaled-above-floor
+    pending: true
+    type: kubectl
+    resource: hpa/{{.WorkloadName}}
+    namespace: "{{.WorkloadNamespace}}"
+    jsonpath: "{.status.currentReplicas}"
+    operator: ">"
+    value: "{{.MinReplicas}}"
+    remediation: "{{.WorkloadName}} has not scaled above its floor of {{.MinReplicas}}. Drive load and re-verify while it is held: labctl traffic start --app {{.WorkloadName}} --profile steady --rps 50. If it still does not scale, read the autoscaler: kubectl -n {{.WorkloadNamespace}} describe hpa {{.WorkloadName}}"
+
+  # Saturation shows up as errors in every runtime.
+  - name: no-errors-under-load
+    pending: true
+    type: promql
+    query: '(sum(rate({{.WorkloadMetric}}_count{app="{{.WorkloadName}}",http_response_status_code=~"5.."}[3m])) or vector(0)) / clamp_min(sum(rate({{.WorkloadMetric}}_count{app="{{.WorkloadName}}"}[3m])), 0.001)'
+    operator: "<"
+    value: "0.01"
+    remediation: "More than 1% of requests are failing under load. Check pod restarts and readiness: kubectl -n {{.WorkloadNamespace}} get pods"
+
+  # Tail amplification, not absolute latency, so the bound travels across runtimes.
+  - name: latency-did-not-degrade
+    pending: true
+    type: promql
+    query: 'histogram_quantile(0.99, sum(rate({{.WorkloadMetric}}_bucket{app="{{.WorkloadName}}"}[3m])) by (le)) / clamp_min(histogram_quantile(0.50, sum(rate({{.WorkloadMetric}}_bucket{app="{{.WorkloadName}}"}[3m])) by (le)), 0.001)'
+    operator: "<"
+    value: "{{.MaxTailAmplification}}"
+    remediation: "The p99 has pulled away from the p50 by more than {{.MaxTailAmplification}}x: requests are queueing behind too few replicas. Confirm the HPA scaled (kubectl -n {{.WorkloadNamespace}} get hpa {{.WorkloadName}}) and maxReplicas is not capping it."
+
+references:
+  - label: "Kubernetes — Horizontal Pod Autoscaler walkthrough"
+    url: "https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale-walkthrough/"
+    note: "The CPU autoscaler this drill declares, and how desired replicas are computed."
+  - label: "Kubernetes — HPA API reference"
+    url: "https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/horizontal-pod-autoscaler-v2/"
+    note: "Every field in manifests/hpa.yaml (min/maxReplicas, metrics, behavior)."
+
+snippets:
+  - label: "CPU HorizontalPodAutoscaler for {{.WorkloadName}}"
+    description: "The exercise. Apply it, then drive load. It holds average CPU at {{.CPUTarget}} percent between {{.MinReplicas}} and {{.MaxReplicas}} replicas."
+    path: manifests/hpa.yaml
+    exercise: true
+    apply: "labctl scenario render autoscaling-basics manifests/hpa.yaml --app {{.WorkloadName}} | kubectl apply -f -"
+  - label: "Inspect the HPA live"
+    description: "Watches the desired and current replica maths while load runs."
+    yaml: |
+      # kubectl -n {{.WorkloadNamespace}} get hpa {{.WorkloadName}} \
+      #   -o custom-columns=NAME:.metadata.name,MIN:.spec.minReplicas,MAX:.spec.maxReplicas,CUR:.status.currentReplicas
+
+explore:
+  urls:
+    - label: "Grafana — Autoscaling basics dashboard (replicas vs load)"
+      url: "http://grafana.{{.IngressURLSuffix}}/d/autoscaling-basics"
+    - label: "Prometheus"
+      url: "http://prometheus.{{.IngressURLSuffix}}"
+  commands:
+    - label: "1. Apply the autoscaler yourself — the snippet marked 'You apply this'"
+      command: "labctl scenario info autoscaling-basics   # copy the HPA apply command, then run it"
+    - label: "2. Drive load"
+      command: "labctl traffic start --app {{.WorkloadName}} --profile steady --rps 50"
+    - label: "3. Watch the HPA react"
+      command: "kubectl -n {{.WorkloadNamespace}} get hpa {{.WorkloadName}} -w"
+    - label: "4. Watch replicas change"
+      command: "kubectl -n {{.WorkloadNamespace}} get deploy {{.WorkloadName}} -w"
+    - label: "5. Verify while load is held"
+      command: "labctl scenario verify autoscaling-basics"
+    - label: "6. Stop load and watch it scale back down"
+      command: "labctl traffic stop --app {{.WorkloadName}}"
+  tips:
+    - "The HPA targets {{.CPUTarget}} percent average CPU; CPU reacts slower than RPS, so hold the load for several minutes."
+    - "The dashboard appears a few seconds after activation: `up` creates a ConfigMap and Grafana's sidecar imports it on its next poll."
+    - "If replicas stay at {{.MinReplicas}}, describe the HPA: kubectl -n {{.WorkloadNamespace}} describe hpa {{.WorkloadName}}"
+    - "Scenario down deletes the HPA you applied, and the next up starts clean — re-apply it from the snippet."
+    - "Grading compares p99 to p50 on {{.WorkloadMetric}}, not p99 to fixed seconds: saturation pulls the tail away from the typical request in every runtime."

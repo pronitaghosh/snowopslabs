@@ -380,6 +380,42 @@ unchanged against another application — `--app <name>`.
 
 ---
 
+### Autoscaling Basics (`autoscaling-basics`)
+
+**Category:** scalability
+
+**What it deploys:**
+- A Grafana dashboard (replicas vs RPS, p99 vs p50, tail amplification)
+
+**What you do:** apply the stock CPU `HorizontalPodAutoscaler` yourself from
+the snippet in `labctl scenario info` — declaring autoscaling is the skill the
+scenario exists to teach — then drive steady load and watch it react. Until
+you do, `verify` reports those steps as PENDING rather than failed. The
+complement to `autoscaling-under-load`: this one uses the built-in HPA on CPU,
+no KEDA required.
+
+**Prerequisites:**
+- Platform: ingress, monitoring/metrics, monitoring/grafana
+- Workload capabilities: `prometheus-metrics`
+
+**Checks (5):** workload metric scraped, HPA present, workload scaled above
+its floor, latency did not degrade (p99/p50 under the `MaxTailAmplification`
+knob), no errors under load.
+
+The scale check reads the **autoscaler's** replica count, not the Deployment's,
+so a hand-run `kubectl scale` does not satisfy it. The CPU target, replica
+bounds, and tail bound are parameters (`CPUTarget`, `MinReplicas`,
+`MaxReplicas`, `MaxTailAmplification`). `scenario down` deletes the HPA you
+applied, and the next `up` starts clean.
+
+**Explore after activation:**
+- Drive load: `labctl traffic start --app <workload> --profile steady --rps 50`
+- Watch scaling: `kubectl -n <workload-ns> get hpa <workload> -w`
+- Verify while load is held: `labctl scenario verify autoscaling-basics`
+
+
+---
+
 ### Multi-Env Promotion (`env-promotion`)
 
 **Category:** delivery

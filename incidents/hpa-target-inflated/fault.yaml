@@ -1,0 +1,20 @@
+name: hpa-target-inflated
+verified: true
+displayName: "Autoscaler target inflated: scales far too late"
+description: "Load climbs on {{.WorkloadName}} and replicas barely stir. The HPA is there and the ceiling is fine — but its CPU target sits near saturation, so the autoscaler holds back until the service is already queueing."
+category: config
+severity: medium
+target:
+  namespace: "{{.WorkloadNamespace}}"
+  workload: "{{.WorkloadName}}"
+prerequisites:
+  apps: ["{{.WorkloadName}}"]
+detection:
+  name: hpa-target-sane
+  type: script
+  script: checks/resolved.sh
+  timeoutSeconds: 30
+references:
+  - label: "Kubernetes — Horizontal Pod Autoscaler walkthrough"
+    url: "https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale-walkthrough/"
+    note: "How averageUtilization turns observed CPU into desired replicas."

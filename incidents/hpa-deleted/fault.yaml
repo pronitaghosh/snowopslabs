@@ -1,0 +1,20 @@
+name: hpa-deleted
+verified: true
+displayName: "Autoscaler deleted: nothing scales the workload"
+description: "Load climbs on {{.WorkloadName}} and the replica count never moves. No HPA answers for the workload anymore — something removed the object that turns metrics into replicas, and a static replica count is all that is left."
+category: config
+severity: high
+target:
+  namespace: "{{.WorkloadNamespace}}"
+  workload: "{{.WorkloadName}}"
+prerequisites:
+  apps: ["{{.WorkloadName}}"]
+detection:
+  name: hpa-present-and-targeting-workload
+  type: script
+  script: checks/resolved.sh
+  timeoutSeconds: 30
+references:
+  - label: "Kubernetes — Horizontal Pod Autoscaler walkthrough"
+    url: "https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale-walkthrough/"
+    note: "What the missing object used to do: turn observed metrics into replica counts."

@@ -1,0 +1,20 @@
+name: hpa-max-pinned
+verified: true
+displayName: "Autoscaler capped: maxReplicas pinned to the floor"
+description: "Load climbs on {{.WorkloadName}} and the replica count never moves. The HPA exists, the metrics flow, and the dashboard draws a flat replicas line under a climbing load line — the ceiling is the floor."
+category: config
+severity: high
+target:
+  namespace: "{{.WorkloadNamespace}}"
+  workload: "{{.WorkloadName}}"
+prerequisites:
+  apps: ["{{.WorkloadName}}"]
+detection:
+  name: hpa-ceiling-above-floor
+  type: script
+  script: checks/resolved.sh
+  timeoutSeconds: 30
+references:
+  - label: "Kubernetes — Horizontal Pod Autoscaler walkthrough"
+    url: "https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale-walkthrough/"
+    note: "How minReplicas, maxReplicas and the scale target interact."

@@ -1,0 +1,215 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "links": [],
+  "panels": [
+    {
+      "title": "$app: Replicas vs Request Rate",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 9,
+        "w": 18,
+        "x": 0,
+        "y": 0
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "expr": "sum(rate({{.WorkloadMetric}}_count{app=\"$app\"}[1m]))",
+          "legendFormat": "RPS"
+        },
+        {
+          "expr": "kube_deployment_status_replicas{namespace=\"$namespace\",deployment=\"$app\"}",
+          "legendFormat": "Replicas"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Replicas"
+            },
+            "properties": [
+              {
+                "id": "custom.axisPlacement",
+                "value": "right"
+              },
+              {
+                "id": "unit",
+                "value": "none"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "RPS"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "reqps"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "title": "Desired vs Current Replicas",
+      "type": "stat",
+      "gridPos": {
+        "h": 9,
+        "w": 6,
+        "x": 18,
+        "y": 0
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "expr": "kube_deployment_status_replicas{namespace=\"$namespace\",deployment=\"$app\"}",
+          "legendFormat": "Replicas"
+        }
+      ]
+    },
+    {
+      "title": "$app: p99 vs p50 latency (tail amplification is graded)",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 9
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.99, sum(rate({{.WorkloadMetric}}_bucket{app=\"$app\"}[5m])) by (le))",
+          "legendFormat": "p99"
+        },
+        {
+          "expr": "histogram_quantile(0.50, sum(rate({{.WorkloadMetric}}_bucket{app=\"$app\"}[5m])) by (le))",
+          "legendFormat": "p50",
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10
+          },
+          "unit": "s"
+        }
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Tail amplification (p99 / p50) — graded: must stay under {{.MaxTailAmplification}}",
+      "description": "What latency-did-not-degrade asserts. A ratio reads the same for a 2ms Go service and a 200ms JVM.",
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 16
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.99, sum(rate({{.WorkloadMetric}}_bucket{app=\"$app\"}[5m])) by (le)) / clamp_min(histogram_quantile(0.50, sum(rate({{.WorkloadMetric}}_bucket{app=\"$app\"}[5m])) by (le)), 0.001)",
+          "legendFormat": "p99/p50",
+          "refId": "A"
+        }
+      ]
+    }
+  ],
+  "schemaVersion": 39,
+  "tags": [
+    "autoscaling",
+    "hpa"
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "app",
+        "label": "App",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "description": "The workload these panels show. Defaults to the app this scenario was activated for.",
+        "query": {
+          "query": "query_result(count by (app) ({{.WorkloadMetric}}_count) or label_replace(vector(1), \"app\", \"{{.WorkloadName}}\", \"\", \"\"))",
+          "refId": "app",
+          "qryType": 3
+        },
+        "definition": "query_result(count by (app) ({{.WorkloadMetric}}_count) or label_replace(vector(1), \"app\", \"{{.WorkloadName}}\", \"\", \"\"))",
+        "regex": "/app=\"([^\"]+)\"/",
+        "refresh": 1,
+        "includeAll": false,
+        "multi": false,
+        "sort": 1,
+        "current": {
+          "selected": true,
+          "text": "{{.WorkloadName}}",
+          "value": "{{.WorkloadName}}"
+        },
+        "options": []
+      },
+      {
+        "name": "namespace",
+        "label": "Namespace",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "description": "Where the selected app runs.",
+        "query": {
+          "query": "label_values(kube_deployment_spec_replicas{deployment=\"$app\"}, namespace)",
+          "refId": "namespace",
+          "qryType": 1
+        },
+        "definition": "label_values(kube_deployment_spec_replicas{deployment=\"$app\"}, namespace)",
+        "refresh": 1,
+        "includeAll": false,
+        "multi": false,
+        "sort": 0,
+        "current": {
+          "selected": true,
+          "text": "{{.WorkloadNamespace}}",
+          "value": "{{.WorkloadNamespace}}"
+        },
+        "options": []
+      }
+    ]
+  },
+  "time": {
+    "from": "now-15m",
+    "to": "now"
+  },
+  "title": "Autoscaling Basics",
+  "uid": "autoscaling-basics"
+}
