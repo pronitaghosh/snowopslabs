@@ -58,5 +58,10 @@ Thumbs.db
 .ai/
 AGENTS.md
 
+## Local docs shims — symlinks into the repo root, never committed
+docs/AGENTS.md
+docs/CLAUDE.md
+docs/claude-dot
+
 ## Internal migration planning — local only, never committed
 .roadmap/
